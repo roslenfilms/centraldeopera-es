@@ -222,6 +222,7 @@ footer.app-footer{text-align:center; padding:26px; font-size:12px; color:#a5a38c
     <div class="header-mid" id="headerDate"></div>
     <div class="header-right">
       <div class="sync-pill" id="syncPill"><span class="dot" id="syncDot"></span><span id="syncText">Iniciando…</span></div>
+      <button class="gear-btn" id="lockBtn" title="Sair da área protegida" style="display:none;" onclick="lockArea()">🔒</button>
       <button class="gear-btn" id="gearBtn" title="Como configurar">⚙</button>
     </div>
   </div>
@@ -258,6 +259,20 @@ footer.app-footer{text-align:center; padding:26px; font-size:12px; color:#a5a38c
    ========================================================================= */
 const SUPABASE_URL = "https://ilwkmsvzrhawbrbhptxm.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_XNgZg6TDVPIoJsPwVc5xFw_w_gXFjCj";
+
+/* =========================================================================
+   ÁREA PROTEGIDA POR SENHA
+   -------------------------------------------------------------------------
+   Defina uma senha abaixo para exigir login nas abas Visão Geral, Agenda,
+   Leads WhatsApp e Financeiro. As abas SSDs e Backups·HDs continuam livres.
+   Deixe em branco ("") para não exigir senha nenhuma.
+   AVISO: como este é um arquivo HTML aberto no navegador, isso NÃO é uma
+   segurança forte — quem abrir o código-fonte do arquivo vê a senha. Serve
+   para evitar acesso casual, não para proteger dados realmente sensíveis.
+   ========================================================================= */
+const AREA_PASSWORD = "Paralelepipedo7@";
+const PROTECTED_TABS = ["overview","agenda","leads","fin"];
+const AREA_SESSION_KEY = "roslen_area_unlocked";
 
 const SQL_SETUP = `create table if not exists roslen_dados (
   id text primary key,
@@ -692,10 +707,49 @@ function renderHeaderDate(){
   document.getElementById('headerDate').textContent = txt.charAt(0).toUpperCase()+txt.slice(1);
 }
 
+/* ========================= ÁREA PROTEGIDA ========================= */
+let areaUnlocked = !AREA_PASSWORD || sessionStorage.getItem(AREA_SESSION_KEY)==='1';
+
+function renderPasswordGate(){
+  return `
+  <div style="max-width:380px;margin:70px auto;text-align:center;">
+    <div style="font-size:34px;margin-bottom:10px;">🔒</div>
+    <h2 class="serif" style="margin:0 0 6px;font-size:26px;">Área protegida</h2>
+    <p class="kpi-sub" style="margin-bottom:22px;">Digite a senha para acessar Visão Geral, Agenda, Leads WhatsApp e Financeiro.</p>
+    <input type="password" id="area-pass-input" placeholder="Senha" style="text-align:center;" onkeydown="if(event.key==='Enter')tryUnlockArea()" autofocus>
+    <div id="area-pass-error" class="kpi-sub" style="color:var(--red);margin-top:8px;height:16px;"></div>
+    <button class="btn" style="margin-top:14px;width:100%;" onclick="tryUnlockArea()">Entrar</button>
+  </div>`;
+}
+function tryUnlockArea(){
+  const input = document.getElementById('area-pass-input');
+  if(input.value === AREA_PASSWORD){
+    areaUnlocked = true;
+    try{ sessionStorage.setItem(AREA_SESSION_KEY, '1'); }catch(e){}
+    renderApp();
+  } else {
+    document.getElementById('area-pass-error').textContent = 'Senha incorreta.';
+    input.value = '';
+    input.focus();
+  }
+}
+function lockArea(){
+  if(!confirm('Sair da área protegida? Vai pedir a senha de novo na próxima vez.')) return;
+  areaUnlocked = false;
+  try{ sessionStorage.removeItem(AREA_SESSION_KEY); }catch(e){}
+  goTo('overview');
+}
+
 /* ========================= APP RENDER ROUTER ========================= */
 function renderApp(){
   renderTabs();
   const app = document.getElementById('app');
+  const lockBtn = document.getElementById('lockBtn');
+  if(lockBtn) lockBtn.style.display = (AREA_PASSWORD && areaUnlocked) ? '' : 'none';
+  if(AREA_PASSWORD && PROTECTED_TABS.includes(currentTab) && !areaUnlocked){
+    app.innerHTML = renderPasswordGate();
+    return;
+  }
   const fns = { overview:renderOverview, ssds:renderSSDs, hds:renderHDs, agenda:renderAgenda, leads:renderLeads, fin:renderFin };
   app.innerHTML = (fns[currentTab] || renderOverview)();
 }
@@ -727,6 +781,31 @@ function renderOverview(){
     .sort((a,b)=>daysBetween(b.contactDate)-daysBetween(a.contactDate)).slice(0,6);
   const nfsList = state.fin.lanc.filter(l=>l.type==="entrada" && l.couple && !l.invoiceIssued).slice(0,6);
 
+  /* ---- Afazeres da semana (Agenda + Entregas dos SSDs) ---- */
+  const today = new Date();
+  const dow = today.getDay(); // 0=Dom
+  const monday = new Date(today); monday.setDate(today.getDate() - ((dow+6)%7));
+  const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
+  const isoMon = monday.toISOString().slice(0,10);
+  const isoSun = sunday.toISOString().slice(0,10);
+
+  const weekTasks = state.tasks
+    .filter(t=>t.status!=="Entregue" && t.date>=isoMon && t.date<=isoSun)
+    .map(t=>({ kind:'agenda', date:t.date, label:`${t.couple} — ${t.task}`, ref:t }));
+
+  const weekEntregas = [];
+  state.ssds.forEach(ssd=>{
+    ssd.couples.forEach(c=>{
+      (c.entregas||[]).forEach(e=>{
+        if(e.status!=="Entregue" && e.dataPrevista && e.dataPrevista>=isoMon && e.dataPrevista<=isoSun){
+          weekEntregas.push({ kind:'ssd', date:e.dataPrevista, label:`${c.name} — ${e.tag}`, ref:{ssd,c,e} });
+        }
+      });
+    });
+  });
+
+  const weekItems = [...weekTasks, ...weekEntregas].sort((a,b)=>a.date.localeCompare(b.date));
+
   return `
   <h1 class="page-title">Visão Geral</h1>
   <p class="page-sub">Panorama do dia a dia da produtora.</p>
@@ -752,6 +831,27 @@ function renderOverview(){
       <div class="kpi-value mono" style="font-size:20px;">${fmtBRL(saldoFinal)}</div>
       <div class="kpi-sub">${nfsAEmitir} NF a emitir · ${extratoRevisar} p/ revisar no extrato</div>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:22px;">
+    <div class="panel-title">Afazeres da semana <span class="kpi-sub" style="font-weight:400;">(${fmtDateBR(isoMon)} – ${fmtDateBR(isoSun)})</span></div>
+    ${weekItems.length? `<div class="table-wrap" style="border:none;">
+      <table>
+        <thead><tr><th>Origem</th><th>Item</th><th>Data</th></tr></thead>
+        <tbody>
+        ${weekItems.map(it=>{
+          const late = it.date < todayISO();
+          const onclick = it.kind==='agenda' ? `goTo('agenda',{taskId:'${it.ref.id}'})` : `goTo('ssds')`;
+          return `<tr style="cursor:pointer;" onclick="${onclick}">
+            <td><span class="badge ${it.kind==='agenda'?'blue':'grey'}">${it.kind==='agenda'?'Agenda':'SSD · Entrega'}</span></td>
+            <td>${escapeHtml(it.label)}</td>
+            <td class="mono" style="${late?'color:var(--red);font-weight:600;':''}">${late?'⚑ ':''}${fmtDateBR(it.date)}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>` : `<div class="empty-state">Nada previsto pra essa semana em Agenda ou entregas de SSD.</div>`}
+    <p class="kpi-sub" style="margin-top:10px;">Financeiro: em breve — me diga o que você quer ver aqui (contas a pagar, NFs a emitir, saldo previsto...) que eu adiciono.</p>
   </div>
 
   <div class="grid grid-3">
@@ -2018,6 +2118,9 @@ function openSetupModal(){
     <div style="margin-bottom:16px;">
       <button class="btn secondary" onclick="forceReloadFromServer()">↻ Forçar atualização (limpar cópia local e recarregar do banco)</button>
       <p class="kpi-sub" style="margin-top:8px;">Use este botão se a tela estiver mostrando dados desatualizados ou diferentes do que está no Supabase.</p>
+    </div>
+    <div class="notice ${AREA_PASSWORD?'':'warn'}">
+      ${AREA_PASSWORD? '🔒 Área protegida ativa (Visão Geral, Agenda, Leads e Financeiro pedem senha).' : 'Área protegida desativada. Para ativar, defina a constante AREA_PASSWORD no topo do arquivo HTML.'}
     </div>
     <p style="font-size:13.5px;">Passo a passo:</p>
     <ol style="font-size:13.5px; padding-left:18px;">

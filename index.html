@@ -1011,7 +1011,7 @@ function renderHDDetail(hd){
   <div class="pill-group" style="margin-bottom:18px;">
     <button class="pill ${hdStatusFilter==='Todos'?'active':''}" onclick="hdStatusFilter='Todos';renderApp()">Todos</button>
     <button class="pill ${hdStatusFilter==='precisa_apagar'?'active':''}" onclick="hdStatusFilter='precisa_apagar';renderApp()">🔴 Precisa apagar</button>
-    <button class="pill ${hdStatusFilter==='pronto'?'active':''}" onclick="hdStatusFilter='pronto';renderApp()">🟢 Prontos</button>
+    <button class="pill ${hdStatusFilter==='pronto'?'active':''}" onclick="hdStatusFilter='pronto';renderApp()">🟢 Organizado</button>
   </div>
 
   <div class="table-wrap">
@@ -1020,7 +1020,8 @@ function renderHDDetail(hd){
         <th>Casal</th>
         <th>Categoria</th>
         <th style="cursor:pointer;white-space:nowrap;" onclick="hdSortDir=hdSortDir==='asc'?'desc':'asc';renderApp();">Data da gravação ${hdSortDir==='asc'?'↑':'↓'}</th>
-        <th>Status</th>
+        <th>Estado da pasta</th>
+        <th>Limpeza do HD</th>
         <th></th>
       </tr></thead>
       <tbody>
@@ -1029,12 +1030,13 @@ function renderHDDetail(hd){
           <td>${escapeHtml(w.couple)}${w.obs?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(w.obs)}</div>`:''}</td>
           <td>${escapeHtml(w.category||'Outros')}</td>
           <td class="mono">${fmtDateBR(w.date)}</td>
-          <td>${w.status==='precisa_apagar'?'<span class="badge red">🔴 Precisa apagar</span>':'<span class="badge green">🟢 Pronto</span>'}</td>
+          <td><span class="badge grey">${w.status==='precisa_apagar'?'Completo':'Prontos'}</span></td>
+          <td>${w.status==='precisa_apagar'?'<span class="badge red">🔴 Precisa apagar</span>':'<span class="badge green">🟢 Organizado</span>'}</td>
           <td style="white-space:nowrap;">
             <button class="btn secondary small" onclick="openWeddingForm('${hd.id}','${w.id}')">Editar</button>
             <button class="btn danger small" onclick="deleteWedding('${hd.id}','${w.id}')">Excluir</button>
           </td>
-        </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:#a5a38c;">Nenhum trabalho neste filtro.</td></tr>`}
+        </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:#a5a38c;">Nenhum trabalho neste filtro.</td></tr>`}
       </tbody>
     </table>
   </div>`;
@@ -1073,11 +1075,12 @@ function openWeddingForm(hdId, wId){
     <select id="f-category">
       ${HD_CATEGORIES.map(c=>`<option value="${c}" ${w&&w.category===c?'selected':''}>${c}</option>`).join('')}
     </select>
-    <label class="field">Status</label>
+    <label class="field">Estado da pasta</label>
     <div class="status-btns" data-tag="wstatus">
-      <button type="button" class="status-btn stb-verde ${(!w||w.status==='pronto')?'selected':''}" data-status="pronto" onclick="selectEstatus(this)">🟢 Pronto</button>
-      <button type="button" class="status-btn stb-vermelho ${w&&w.status==='precisa_apagar'?'selected':''}" data-status="precisa_apagar" onclick="selectEstatus(this)">🔴 Precisa apagar</button>
+      <button type="button" class="status-btn stb-vermelho ${w&&w.status==='precisa_apagar'?'selected':''}" data-status="precisa_apagar" onclick="selectEstatus(this)">Completo</button>
+      <button type="button" class="status-btn stb-verde ${(!w||w.status==='pronto')?'selected':''}" data-status="pronto" onclick="selectEstatus(this)">Prontos</button>
     </div>
+    <p class="kpi-sub" style="margin-top:6px;">Completo = ainda tem brutos/projeto no HD (fica marcado 🔴 Precisa apagar). Prontos = só os arquivos finais entregues (fica 🟢 Organizado).</p>
     <label class="field">Observação (opcional)</label>
     <input type="text" id="f-obs" value="${w?escapeHtml(w.obs||''):''}">
   `, ()=>{

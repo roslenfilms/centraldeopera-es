@@ -104,6 +104,15 @@ main{max-width:1400px; margin:0 auto; padding:24px; padding-bottom:80px;}
 .status-legend span{display:inline-flex; align-items:center; gap:5px;}
 .status-legend .sw{width:10px; height:10px; border-radius:3px; border:1px solid var(--line);}
 
+.status-btns{display:flex; gap:5px; flex-wrap:wrap;}
+.status-btn{border:1px solid var(--line); font-size:11.5px; padding:5px 11px; border-radius:14px; cursor:pointer; opacity:.5; transition:opacity .12s, box-shadow .12s;}
+.status-btn:hover{opacity:.85;}
+.status-btn.selected{opacity:1; font-weight:600; box-shadow:0 0 0 2px rgba(27,26,20,.12);}
+.status-btn.stb-branco{background:#fff; color:#7a7860; border-color:var(--line);}
+.status-btn.stb-amarelo{background:#FCEFD6; color:#8a6a1f; border-color:#EBD9AA;}
+.status-btn.stb-rosa{background:#F7E2E2; color:#9a4f4f; border-color:#EFC9C9;}
+.status-btn.stb-verde{background:rgba(94,122,74,.16); color:var(--green); border-color:rgba(94,122,74,.35);}
+
 .btn{border:1px solid var(--olive-dark); background:var(--olive-dark); color:#fff; padding:9px 16px; border-radius:7px; font-size:13px; font-weight:500;}
 .btn:hover{background:#3c3b21;}
 .btn.secondary{background:var(--white); color:var(--olive-dark); border:1px solid var(--line);}
@@ -276,7 +285,7 @@ const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out"
 const DOW = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
 /* ---- Entregas (deliverables) com data + status ---- */
-const ENTREGA_TAGS = ["Teaser","Filme","Post Card","Melhores Cenas","Cerimônia na Íntegra","Pré-Wedding","Making of Bride"];
+const ENTREGA_TAGS = ["Teaser","Filme","PostCard","Melhores Cenas","Cerimônia na Íntegra","Pré-Wedding","Bride","VHS","Super8mm"];
 const DELIVERY_STATUSES = ["A fazer","Em edição","Em correção","Entregue"];
 const RETA_FINAL_TAGS = ["Filme","Melhores Cenas"]; // ficam vermelhas quando faltar <=30 dias e não entregue
 function mkEntrega(tag, status, dataPrevista){
@@ -301,7 +310,7 @@ function seedState(){
     ssds: [
       { id:"ssd1", name:"SSD 1", capacityGB:1000, couples:[
         { id:uid(), name:"Samira & Denis", gb:503.81, entregas:[
-          mkEntrega("Teaser"), mkEntrega("Filme"), mkEntrega("Post Card"), mkEntrega("Melhores Cenas")
+          mkEntrega("Teaser"), mkEntrega("Filme"), mkEntrega("PostCard"), mkEntrega("Melhores Cenas")
         ]},
         { id:uid(), name:"Beatriz & Samuel", gb:402, entregas:[
           mkEntrega("Teaser"), mkEntrega("Filme"), mkEntrega("Cerimônia na Íntegra")
@@ -842,6 +851,12 @@ function openCoupleForm(ssdId, coupleId){
   const couple = coupleId ? ssd.couples.find(c=>c.id===coupleId) : null;
   const entregasByTag = {};
   (couple? couple.entregas||[] : []).forEach(e=> entregasByTag[e.tag]=e);
+  const STATUS_BUTTONS = [
+    { value:"A fazer", label:"Parado", cls:"stb-branco" },
+    { value:"Em edição", label:"Em edição", cls:"stb-amarelo" },
+    { value:"Em correção", label:"Correção", cls:"stb-rosa" },
+    { value:"Entregue", label:"Finalizado", cls:"stb-verde" }
+  ];
   showModal(`${couple?'Editar':'Novo'} casal`, `
     <label class="field">Nome do casal</label>
     <input type="text" id="f-name" value="${couple?escapeHtml(couple.name):''}">
@@ -857,13 +872,14 @@ function openCoupleForm(ssdId, coupleId){
         ${ENTREGA_TAGS.map(t=>{
           const e = entregasByTag[t];
           const checked = !!e;
+          const curStatus = e? e.status : "A fazer";
           return `<tr>
             <td><input type="checkbox" class="f-etag" data-tag="${t}" ${checked?'checked':''} onchange="document.getElementById('row-status-${cssId(t)}').style.display=this.checked?'':'none';document.getElementById('row-date-${cssId(t)}').style.display=this.checked?'':'none';"></td>
             <td>${t}</td>
             <td id="row-status-${cssId(t)}" style="${checked?'':'display:none;'}">
-              <select class="inline-select f-estatus" data-tag="${t}">
-                ${DELIVERY_STATUSES.map(s=>`<option value="${s}" ${e&&e.status===s?'selected':''}>${s}</option>`).join('')}
-              </select>
+              <div class="status-btns" data-tag="${t}">
+                ${STATUS_BUTTONS.map(sb=>`<button type="button" class="status-btn ${sb.cls} ${curStatus===sb.value?'selected':''}" data-status="${sb.value}" onclick="selectEstatus(this)">${sb.label}</button>`).join('')}
+              </div>
             </td>
             <td id="row-date-${cssId(t)}" style="${checked?'':'display:none;'}">
               <input type="date" class="f-edata" data-tag="${t}" value="${e?e.dataPrevista:''}">
@@ -881,7 +897,8 @@ function openCoupleForm(ssdId, coupleId){
     const entregas = [];
     document.querySelectorAll('.f-etag:checked').forEach(cb=>{
       const tag = cb.dataset.tag;
-      const status = document.querySelector(`.f-estatus[data-tag="${cssEsc(tag)}"]`).value;
+      const selBtn = document.querySelector(`.status-btns[data-tag="${cssEsc(tag)}"] .status-btn.selected`);
+      const status = selBtn ? selBtn.dataset.status : "A fazer";
       const dataPrevista = document.querySelector(`.f-edata[data-tag="${cssEsc(tag)}"]`).value;
       entregas.push({ tag, status, dataPrevista });
     });
@@ -892,6 +909,11 @@ function openCoupleForm(ssdId, coupleId){
 }
 function cssId(s){ return s.replace(/[^a-zA-Z0-9]/g,'_'); }
 function cssEsc(s){ return s.replace(/(["\\])/g,'\\$1'); }
+function selectEstatus(btn){
+  const group = btn.closest('.status-btns');
+  group.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
 function deleteCouple(ssdId, coupleId){
   if(!confirm('Excluir este casal do SSD?')) return;
   const ssd = state.ssds.find(s=>s.id===ssdId);
@@ -1899,10 +1921,19 @@ function showModal(title, bodyHtml, onSave, onDelete, wide){
 function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
 
 /* ---- Modal "Como configurar" ---- */
+function forceReloadFromServer(){
+  if(!confirm('Isso vai apagar a cópia local salva neste navegador e recarregar tudo direto do banco de dados. Continuar?')) return;
+  try{ localStorage.removeItem(LS_KEY); }catch(e){}
+  location.reload(true);
+}
 function openSetupModal(){
   showModal('Como configurar', `
     <div class="notice ${supabaseConfigured?'':'warn'}">
       ${supabaseConfigured? 'Supabase configurado — os dados sincronizam entre aparelhos.' : 'Supabase ainda não configurado — os dados ficam salvos só neste navegador.'}
+    </div>
+    <div style="margin-bottom:16px;">
+      <button class="btn secondary" onclick="forceReloadFromServer()">↻ Forçar atualização (limpar cópia local e recarregar do banco)</button>
+      <p class="kpi-sub" style="margin-top:8px;">Use este botão se a tela estiver mostrando dados desatualizados ou diferentes do que está no Supabase.</p>
     </div>
     <p style="font-size:13.5px;">Passo a passo:</p>
     <ol style="font-size:13.5px; padding-left:18px;">

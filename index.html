@@ -93,6 +93,17 @@ main{max-width:1400px; margin:0 auto; padding:24px; padding-bottom:80px;}
 
 .tag{display:inline-block; background:var(--panel); border:1px solid var(--line); color:var(--olive-dark); font-size:11px; padding:2px 8px; border-radius:6px; margin:2px 3px 0 0;}
 
+.dtag{display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 9px; border-radius:6px; margin:2px 4px 4px 0; border:1px solid var(--line); background:#fff;}
+.dtag .dt-date{font-family:'IBM Plex Mono',monospace; opacity:.75;}
+.dtag.st-branco{background:#fff; color:#7a7860; border-color:var(--line);}
+.dtag.st-amarelo{background:#FCEFD6; color:#8a6a1f; border-color:#EBD9AA;}
+.dtag.st-rosa{background:#F7E2E2; color:#9a4f4f; border-color:#EFC9C9;}
+.dtag.st-verde{background:rgba(94,122,74,.14); color:var(--green); border-color:rgba(94,122,74,.3);}
+.dtag.st-vermelho{background:rgba(150,66,46,.14); color:var(--red); border-color:rgba(150,66,46,.35); font-weight:600;}
+.status-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:#7a7860; margin:10px 0 4px;}
+.status-legend span{display:inline-flex; align-items:center; gap:5px;}
+.status-legend .sw{width:10px; height:10px; border-radius:3px; border:1px solid var(--line);}
+
 .btn{border:1px solid var(--olive-dark); background:var(--olive-dark); color:#fff; padding:9px 16px; border-radius:7px; font-size:13px; font-weight:500;}
 .btn:hover{background:#3c3b21;}
 .btn.secondary{background:var(--white); color:var(--olive-dark); border:1px solid var(--line);}
@@ -264,35 +275,196 @@ const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Ag
 const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const DOW = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
+/* ---- Entregas (deliverables) com data + status ---- */
+const ENTREGA_TAGS = ["Teaser","Filme","Post Card","Melhores Cenas","Cerimônia na Íntegra","Pré-Wedding","Making of Bride"];
+const DELIVERY_STATUSES = ["A fazer","Em edição","Em correção","Entregue"];
+const RETA_FINAL_TAGS = ["Filme","Melhores Cenas"]; // ficam vermelhas quando faltar <=30 dias e não entregue
+function mkEntrega(tag, status, dataPrevista){
+  return { tag, status: status||"A fazer", dataPrevista: dataPrevista||"" };
+}
+function diasAte(iso){ if(!iso) return null; const d=parseISO(iso); if(!d) return null; return Math.ceil((d.getTime()-Date.now())/86400000); }
+function entregaColor(entrega){
+  if(entrega.status==="Entregue") return "verde";
+  if(RETA_FINAL_TAGS.includes(entrega.tag) && entrega.dataPrevista){
+    const dias = diasAte(entrega.dataPrevista);
+    if(dias!==null && dias<=30) return "vermelho";
+  }
+  if(entrega.status==="Em edição") return "amarelo";
+  if(entrega.status==="Em correção") return "rosa";
+  return "branco";
+}
+
 /* ========================= ESTADO / SEED ========================= */
 function seedState(){
   const y = new Date().getFullYear();
   return {
     ssds: [
-      { id:uid(), name:"SSD 1", capacityGB:1000, couples:[
-        { id:uid(), name:"Ana & Bruno", gb:180, tags:["Teaser","Filme"] },
-        { id:uid(), name:"Camila & Diego", gb:210, tags:["Cerimônia na Íntegra","Melhores Cenas"] }
+      { id:"ssd1", name:"SSD 1", capacityGB:1000, couples:[
+        { id:uid(), name:"Samira & Denis", gb:503.81, entregas:[
+          mkEntrega("Teaser"), mkEntrega("Filme"), mkEntrega("Post Card"), mkEntrega("Melhores Cenas")
+        ]},
+        { id:uid(), name:"Beatriz & Samuel", gb:402, entregas:[
+          mkEntrega("Teaser"), mkEntrega("Filme"), mkEntrega("Cerimônia na Íntegra")
+        ]},
+        { id:uid(), name:"Editorial Nayara Costa", gb:1.8, entregas:[] }
       ]},
-      { id:uid(), name:"SSD 2", capacityGB:1000, couples:[
-        { id:uid(), name:"Elisa & Felipe", gb:640, tags:["Filme","Post Card","Pré-Wedding"] }
+      { id:"ssd2", name:"SSD 2", capacityGB:2000, couples:[
+        { id:uid(), name:"Giulia & Lucas", gb:0, entregas:[
+          mkEntrega("Cerimônia na Íntegra"), mkEntrega("Filme"), mkEntrega("Melhores Cenas")
+        ], obs:"Cortesia em Super 8mm" },
+        { id:uid(), name:"Ana Niero & Arthur", gb:0, entregas:[] },
+        { id:uid(), name:"Mariana & Lucas", gb:0, entregas:[], obs:"Vídeo em Super 8mm" }
       ]},
-      { id:uid(), name:"SSD 3", capacityGB:1000, couples:[] },
-      { id:uid(), name:"SSD 4", capacityGB:1000, couples:[] },
-      { id:uid(), name:"SSD 5", capacityGB:1000, couples:[] },
-      { id:uid(), name:"Ignes", capacityGB:1000, couples:[], reserva:true },
-      { id:uid(), name:"Igis", capacityGB:1000, couples:[], reserva:true }
+      { id:"ssd3", name:"SSD 3", capacityGB:2000, couples:[
+        { id:uid(), name:"Thiago & Rafaela", gb:0, entregas:[ mkEntrega("Teaser"), mkEntrega("Filme") ]},
+        { id:uid(), name:"Anelise & Newton", gb:0, entregas:[ mkEntrega("Filme") ]},
+        { id:uid(), name:"Liê & Kally", gb:0, entregas:[ mkEntrega("Melhores Cenas") ]},
+        { id:uid(), name:"Susana & Lucas", gb:0, entregas:[ mkEntrega("Filme"), mkEntrega("Melhores Cenas") ]},
+        { id:uid(), name:"Érika & Luiz", gb:0, entregas:[], obs:"Pré-wedding e Casamento" },
+        { id:uid(), name:"Mariana Cabelo", gb:0, entregas:[], obs:"Editorial" },
+        { id:uid(), name:"Gabi Vitorelli & Lucas", gb:0, entregas:[] },
+        { id:uid(), name:"Georgia & Lucas", gb:0, entregas:[] }
+      ]},
+      { id:"ssd4", name:"SSD 4", capacityGB:1000, couples:[
+        { id:uid(), name:"Gabriela & Felipe", gb:0, entregas:[ mkEntrega("Filme") ]},
+        { id:uid(), name:"Isabela & Vinícius", gb:0, entregas:[ mkEntrega("Filme") ]},
+        { id:uid(), name:"Chá da Tete", gb:0, entregas:[] }
+      ]},
+      { id:"ssd5", name:"SSD 5", capacityGB:2000, couples:[
+        { id:uid(), name:"Gabi & Lucas", gb:0, entregas:[], obs:"For Bride — Pré-wedding" },
+        { id:uid(), name:"Agnes & Marcos", gb:0, entregas:[ mkEntrega("Filme") ]},
+        { id:uid(), name:"Vlog Paraty", gb:0, entregas:[], obs:"A editar" },
+        { id:uid(), name:"Itália 2026", gb:0, entregas:[], obs:"A editar" },
+        { id:uid(), name:"Baby Mahnic", gb:0, entregas:[], obs:"Chá revelação" }
+      ]},
+      { id:"ignis", name:"Ignis", capacityGB:2000, couples:[
+        { id:uid(), name:"Jo & Tha", gb:0, entregas:[ mkEntrega("Teaser") ], obs:"Evento" }
+      ], reserva:true },
+      { id:"ytignis", name:"YT Igreja Ignis", capacityGB:2000, couples:[
+        { id:uid(), name:"Sônia & Gabriel", gb:0, entregas:[ mkEntrega("Teaser"), mkEntrega("Filme") ]},
+        { id:uid(), name:"Backup Samira & Denis", gb:0, entregas:[], obs:"Backup" }
+      ], reserva:true }
     ],
     hds: [
-      { id:uid(), name:"HD 1", weddings:[
-        { id:uid(), couple:"Ana & Bruno", date:`${y}-03-14`, status:"completo" },
-        { id:uid(), couple:"Camila & Diego", date:`${y}-05-02`, status:"parcial" }
+      { id:"hd1", name:"HD 1", capacityGB:0, weddings:[] },
+      { id:"hd2", name:"HD 2", capacityGB:1250, weddings:[
+        { id:uid(), couple:"Iasmin & Lucas", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Marcela & Luiz Felipe", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Ana Niero & Arthur", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Nicolly & Felipe", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Susana & Lucas", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Daniel & Carla", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Marcela", date:`${y}-06-15`, status:"completo", obs:"Bride" },
+        { id:uid(), couple:"Ana Niero", date:`${y}-06-15`, status:"completo", obs:"Bride" },
+        { id:uid(), couple:"Beatriz & Samuel", date:`${y}-06-15`, status:"parcial", obs:"Pré-wedding — falta projeto" },
+        { id:uid(), couple:"Érika & Luiz Felipe", date:`${y}-06-15`, status:"parcial", obs:"Pré-wedding — falta o projeto" },
+        { id:uid(), couple:"Pri Oliveira", date:`${y}-06-15`, status:"parcial", obs:"Editorial — Brides&Bubbles — falta projeto" },
+        { id:uid(), couple:"Gabi Vitorelli", date:`${y}-06-15`, status:"completo", obs:"Chá" },
+        { id:uid(), couple:"Ana Mosconi", date:`${y-1}-06-15`, status:"parcial", obs:"Bride" },
+        { id:uid(), couple:"Gabi Bataline", date:`${y-1}-06-15`, status:"parcial", obs:"Bride" },
+        { id:uid(), couple:"Geovana", date:`${y-1}-06-15`, status:"parcial", obs:"Bride" },
+        { id:uid(), couple:"Mari Ajita", date:`${y-1}-06-15`, status:"parcial", obs:"Bride" },
+        { id:uid(), couple:"Ana Mosconi", date:`${y-1}-06-15`, status:"parcial", obs:"Noivado" },
+        { id:uid(), couple:"Gabriela & Lucas", date:`${y-1}-06-15`, status:"parcial", obs:"Noivado" },
+        { id:uid(), couple:"Juliana", date:`${y-1}-06-15`, status:"parcial", obs:"Noivado — Bar / Caipira" },
+        { id:uid(), couple:"Juliana & Gabriel", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding" },
+        { id:uid(), couple:"Maria Gabriela & Ricardo", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding" },
+        { id:uid(), couple:"Mari Ajita & Felipe", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding" },
+        { id:uid(), couple:"Nicolly & Matheus", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding" },
+        { id:uid(), couple:"Vitória & Matheus", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding" },
+        { id:uid(), couple:"Rebeca & Guilherme", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding" },
+        { id:uid(), couple:"Rebeca & Guilherme", date:`${y-1}-09-01`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Victoria & Bruno", date:`${y-1}-09-01`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Bruna & Paulo", date:`${y-1}-09-01`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Cibele & Thiago", date:`${y-1}-09-01`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Geovana & Samuel", date:`${y-1}-09-01`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Julia & Pedro", date:`${y-1}-09-01`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Juliana & Leonardo", date:`${y-1}-09-01`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Juslei & Daan", date:`${y-1}-09-01`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Mari & Jhonatan", date:`${y-1}-09-01`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Marina & Eduardo", date:`${y-1}-09-01`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Mariana & Lucas", date:`${y-1}-09-01`, status:"completo", obs:"Ensaio" }
       ]},
-      { id:uid(), name:"HD 2", weddings:[
-        { id:uid(), couple:"Elisa & Felipe", date:`${y}-07-19`, status:"completo" }
+      { id:"hd3", name:"HD 3", capacityGB:443, weddings:[
+        { id:uid(), couple:"Rubens & Roberta", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Luísa & Beto Acorssi", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Eduarda & Gian", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Campanha de Dia das Mães", date:`${y}-05-10`, status:"completo", obs:"Campanha" },
+        { id:uid(), couple:"Carla", date:`${y}-06-15`, status:"completo", obs:"Bride" },
+        { id:uid(), couple:"Giovana & Jonatas", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Victoria & Matheus", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Rachel & Gui", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Quezia & Matheus", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Nathalia & Ricardo", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Maria Gabriela & Ricardo", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Isabela & Leandro", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Casa Dumont", date:`${y-1}-06-15`, status:"completo", obs:"Editorial / Bride" },
+        { id:uid(), couple:"Mariana & Lucas", date:`${y-1}-06-15`, status:"completo", obs:"Ensaio" },
+        { id:uid(), couple:"Georgia & Lucas", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding" },
+        { id:uid(), couple:"Jacqueline & Adriano", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding" },
+        { id:uid(), couple:"Mari Ajita & Felipe", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding" },
+        { id:uid(), couple:"Sâmia", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding — nome do par a confirmar" },
+        { id:uid(), couple:"Daniel & Carla", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding — colocar projeto" }
       ]},
-      { id:uid(), name:"HD 3", weddings:[] },
-      { id:uid(), name:"HD 4", weddings:[] },
-      { id:uid(), name:"HD 5", weddings:[] }
+      { id:"hd4", name:"HD 4", capacityGB:1270, weddings:[
+        { id:uid(), couple:"Ana & Rafael", date:`${y}-01-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Julia & Murilo", date:`${y}-01-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Larissa & Matheus", date:`${y}-01-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Giovana & Gabriel", date:`${y}-01-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Sabrina & Cristian", date:`${y}-01-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Mariana & Vitor", date:`${y}-01-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Ana Niero", date:`${y}-01-15`, status:"completo", obs:"Editorial — Ilios" },
+        { id:uid(), couple:"Casa Dumont", date:`${y}-01-15`, status:"completo", obs:"Editorial" },
+        { id:uid(), couple:"Totti", date:`${y}-01-15`, status:"completo", obs:"Editorial — Formatura" },
+        { id:uid(), couple:"Publi Luísa Acorsi", date:`${y}-01-15`, status:"completo", obs:"Editorial" },
+        { id:uid(), couple:"Mariana Cabelo", date:`${y}-01-15`, status:"completo", obs:"Editorial" },
+        { id:uid(), couple:"Carol Rangel & Pedro", date:`${y}-01-15`, status:"completo", obs:"Pré-wedding" },
+        { id:uid(), couple:"Giovana & Gabriel", date:`${y}-01-15`, status:"completo", obs:"Pré-wedding" },
+        { id:uid(), couple:"Marcela & Luiz", date:`${y}-01-15`, status:"completo", obs:"Pré-wedding" },
+        { id:uid(), couple:"Gabi Bataline & Rodrigo", date:`${y-1}-06-15`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Marina & Eduardo", date:`${y-1}-06-15`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Paulinha & Gui", date:`${y-1}-06-15`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Rachel & Gui", date:`${y-1}-06-15`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Amanda & Ivan", date:`${y-1}-06-15`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Kemily & Erick", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Nicolly & Mathes", date:`${y-1}-06-15`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Paola & Matheus", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Rebeca & João", date:`${y-1}-06-15`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Melissa & Evandro", date:`${y-1}-06-15`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Jaqueline & Bruno", date:`${y-1}-06-15`, status:"parcial", obs:"Casamento" },
+        { id:uid(), couple:"Ana & Eduardo", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Mariana & Victor", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" }
+      ]},
+      { id:"hd5", name:"HD 5", capacityGB:900, weddings:[
+        { id:uid(), couple:"Gabriela & Felipe", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Gabriela & Lucas", date:`${y}-06-15`, status:"completo", obs:"Pré-wedding" },
+        { id:uid(), couple:"Baby Mahnic", date:`${y}-06-15`, status:"completo", obs:"Revelação" },
+        { id:uid(), couple:"Gabi Marussi", date:`${y}-06-15`, status:"completo", obs:"Bride" },
+        { id:uid(), couple:"Agnes & Marcos", date:`${y}-06-15`, status:"completo", obs:"" },
+        { id:uid(), couple:"Anelise & Newton", date:`${y}-06-15`, status:"completo", obs:"Pré-wedding" },
+        { id:uid(), couple:"Anelise & Newton", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Forbride", date:`${y}-06-15`, status:"completo", obs:"Evento" },
+        { id:uid(), couple:"Beatriz & Samuel", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Sônia & Gabriel", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Sônia & Gabriel", date:`${y}-06-15`, status:"completo", obs:"VHS" },
+        { id:uid(), couple:"Isabela & Vinícius", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Giulia & Lucas", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Érika & Luiz", date:`${y}-06-15`, status:"completo", obs:"Pré-wedding" },
+        { id:uid(), couple:"Agnes", date:`${y}-06-15`, status:"completo", obs:"Bride" },
+        { id:uid(), couple:"Liê & Kally", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Thiago & Rafaela", date:`${y}-06-15`, status:"completo", obs:"Pré-wedding" },
+        { id:uid(), couple:"Isabele & Guilherme", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Isabela & Thiago", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
+        { id:uid(), couple:"Jojo & Tata", date:`${y}-06-15`, status:"completo", obs:"Evento" },
+        { id:uid(), couple:"Michelle & Mateus", date:`${y}-06-15`, status:"completo", obs:"Chá revelação" },
+        { id:uid(), couple:"Caixa de Padrinhos", date:`${y}-06-15`, status:"completo", obs:"" },
+        { id:uid(), couple:"Érika & Luiz", date:`${y}-06-15`, status:"completo", obs:"Pré e Casamento" },
+        { id:uid(), couple:"Todos por Um", date:`${y}-06-15`, status:"completo", obs:"Fotos" },
+        { id:uid(), couple:"José", date:`${y}-06-15`, status:"completo", obs:"Pregação" },
+        { id:uid(), couple:"Nayara Costa", date:`${y}-06-15`, status:"completo", obs:"Editorial 2026" },
+        { id:uid(), couple:"Itália", date:`${y}-06-15`, status:"completo", obs:"2026" },
+        { id:uid(), couple:"Paraty", date:`${y}-06-15`, status:"completo", obs:"2026" }
+      ]}
     ],
     agendas: [
       { id:"roslen", name:"Roslen", color:"#6C6A3E" },
@@ -307,9 +479,10 @@ function seedState(){
       { id:uid(), agendaId:"lucas", couple:"Giulia & Hugo", task:"Reunião de alinhamento", type:"Reunião", date:`${y}-08-20`, status:"A fazer" }
     ],
     leads: [
-      { id:uid(), name:"Isabela Nunes", phone:"(11) 98888-1122", contactDate:`${y}-07-20`, assessoria:"Fina Estampa Eventos", venue:"Fazenda Boa Vista", budget:18500, status:"Pendente resposta" },
-      { id:uid(), name:"Marina Torres", phone:"(11) 97777-3344", contactDate:`${y}-07-10`, assessoria:"—", venue:"Espaço Villa Bisutti", budget:15200, status:"Fechou" },
-      { id:uid(), name:"Renata Freitas", phone:"(11) 96666-5566", contactDate:`${y}-06-28`, assessoria:"Cerimonial Flor de Lis", venue:"Casa Petra", budget:21000, status:"Não respondeu" }
+      { id:uid(), name:"Rebeca & Gustavo", phone:"", contactDate:todayISO(), eventDate:`${y}-11-08`, eventTime:"19h", venueCeremony:"Empório Guimarães", venueReception:"Empório Guimarães", cityState:"Londrina PR", guestCount:150, assessoria:"Vamos contratar apenas a do dia", budget:0, status:"Pendente resposta" },
+      { id:uid(), name:"Isabela Nunes", phone:"(11) 98888-1122", contactDate:`${y}-07-20`, eventDate:"", eventTime:"", venueCeremony:"Fazenda Boa Vista", venueReception:"Fazenda Boa Vista", cityState:"", guestCount:0, assessoria:"Fina Estampa Eventos", budget:18500, status:"Pendente resposta" },
+      { id:uid(), name:"Marina Torres", phone:"(11) 97777-3344", contactDate:`${y}-07-10`, eventDate:"", eventTime:"", venueCeremony:"Espaço Villa Bisutti", venueReception:"Espaço Villa Bisutti", cityState:"", guestCount:0, assessoria:"—", budget:15200, status:"Fechou" },
+      { id:uid(), name:"Renata Freitas", phone:"(11) 96666-5566", contactDate:`${y}-06-28`, eventDate:"", eventTime:"", venueCeremony:"Casa Petra", venueReception:"Casa Petra", cityState:"", guestCount:0, assessoria:"Cerimonial Flor de Lis", budget:21000, status:"Não respondeu" }
     ],
     fin: {
       saldoInicial: {},
@@ -582,8 +755,6 @@ function renderOverview(){
 }
 
 /* ========================= ABA 2 · SSDs ========================= */
-const ENTREGA_TAGS = ["Teaser","Filme","Post Card","Melhores Cenas","Cerimônia na Íntegra","Pré-Wedding","Making of Bride"];
-
 function renderSSDs(){
   return `
   <div class="toolbar">
@@ -591,6 +762,13 @@ function renderSSDs(){
     <div class="section-actions">
       <button class="btn secondary" onclick="openSSDForm()">+ Novo SSD</button>
     </div>
+  </div>
+  <div class="status-legend">
+    <span><span class="sw" style="background:#fff;"></span>Parado</span>
+    <span><span class="sw" style="background:#FCEFD6;"></span>Sendo editado</span>
+    <span><span class="sw" style="background:#F7E2E2;"></span>Em correção</span>
+    <span><span class="sw" style="background:rgba(94,122,74,.3);"></span>Entregue</span>
+    <span><span class="sw" style="background:rgba(150,66,46,.3);"></span>Reta final (≤30 dias · Filme/Melhores Cenas)</span>
   </div>
   <div class="grid grid-2">
     ${state.ssds.map(renderSSDCard).join('')}
@@ -616,13 +794,16 @@ function renderSSDCard(ssd){
     <div class="kpi-sub mono">${fmtGB(used)} usado · ${fmtGB(Math.max(0,ssd.capacityGB-used))} livre · ${fmtGB(ssd.capacityGB)} total</div>
     <div class="table-wrap" style="margin-top:14px;">
       <table>
-        <thead><tr><th>Casal</th><th>GB</th><th>Conteúdo</th><th></th></tr></thead>
+        <thead><tr><th>Casal</th><th>GB</th><th>Entregas</th><th></th></tr></thead>
         <tbody>
         ${ssd.couples.length? ssd.couples.map(c=>`
           <tr>
-            <td>${escapeHtml(c.name)}</td>
+            <td>${escapeHtml(c.name)}${c.obs?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(c.obs)}</div>`:''}</td>
             <td class="mono">${fmtGB(c.gb)}</td>
-            <td>${c.tags.map(t=>`<span class="tag">${escapeHtml(t)}</span>`).join('')}</td>
+            <td>${(c.entregas&&c.entregas.length)? c.entregas.map(e=>{
+              const col = entregaColor(e);
+              return `<span class="dtag st-${col}">${escapeHtml(e.tag)}${e.dataPrevista?`<span class="dt-date">${fmtDateBR(e.dataPrevista)}</span>`:''}</span>`;
+            }).join('') : '<span class="kpi-sub">—</span>'}</td>
             <td style="white-space:nowrap;">
               <button class="btn secondary small" onclick="openCoupleForm('${ssd.id}','${c.id}')">Editar</button>
               <button class="btn danger small" onclick="deleteCouple('${ssd.id}','${c.id}')">Excluir</button>
@@ -659,25 +840,58 @@ function deleteSSD(id){
 function openCoupleForm(ssdId, coupleId){
   const ssd = state.ssds.find(s=>s.id===ssdId);
   const couple = coupleId ? ssd.couples.find(c=>c.id===coupleId) : null;
+  const entregasByTag = {};
+  (couple? couple.entregas||[] : []).forEach(e=> entregasByTag[e.tag]=e);
   showModal(`${couple?'Editar':'Novo'} casal`, `
     <label class="field">Nome do casal</label>
     <input type="text" id="f-name" value="${couple?escapeHtml(couple.name):''}">
     <label class="field">GB ocupados</label>
     <input type="number" id="f-gb" class="mono" value="${couple?couple.gb:0}">
-    <label class="field">Conteúdo gravado</label>
-    <div class="checkbox-grid">
-      ${ENTREGA_TAGS.map(t=>`<label class="checkbox-row"><input type="checkbox" class="f-tag" value="${t}" ${couple&&couple.tags.includes(t)?'checked':''}> ${t}</label>`).join('')}
+    <label class="field">Observação (opcional)</label>
+    <input type="text" id="f-obs" value="${couple?escapeHtml(couple.obs||''):''}">
+    <label class="field">Entregas — marque as que fazem parte do contrato</label>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Entrega</th><th>Status</th><th>Data prevista</th></tr></thead>
+        <tbody>
+        ${ENTREGA_TAGS.map(t=>{
+          const e = entregasByTag[t];
+          const checked = !!e;
+          return `<tr>
+            <td><input type="checkbox" class="f-etag" data-tag="${t}" ${checked?'checked':''} onchange="document.getElementById('row-status-${cssId(t)}').style.display=this.checked?'':'none';document.getElementById('row-date-${cssId(t)}').style.display=this.checked?'':'none';"></td>
+            <td>${t}</td>
+            <td id="row-status-${cssId(t)}" style="${checked?'':'display:none;'}">
+              <select class="inline-select f-estatus" data-tag="${t}">
+                ${DELIVERY_STATUSES.map(s=>`<option value="${s}" ${e&&e.status===s?'selected':''}>${s}</option>`).join('')}
+              </select>
+            </td>
+            <td id="row-date-${cssId(t)}" style="${checked?'':'display:none;'}">
+              <input type="date" class="f-edata" data-tag="${t}" value="${e?e.dataPrevista:''}">
+            </td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
     </div>
   `, ()=>{
     const name = document.getElementById('f-name').value.trim();
     const gb = Number(document.getElementById('f-gb').value)||0;
-    const tags = [...document.querySelectorAll('.f-tag:checked')].map(el=>el.value);
+    const obs = document.getElementById('f-obs').value.trim();
     if(!name) return alert('Informe o nome do casal.');
-    if(couple){ couple.name=name; couple.gb=gb; couple.tags=tags; }
-    else { ssd.couples.push({ id:uid(), name, gb, tags }); }
+    const entregas = [];
+    document.querySelectorAll('.f-etag:checked').forEach(cb=>{
+      const tag = cb.dataset.tag;
+      const status = document.querySelector(`.f-estatus[data-tag="${cssEsc(tag)}"]`).value;
+      const dataPrevista = document.querySelector(`.f-edata[data-tag="${cssEsc(tag)}"]`).value;
+      entregas.push({ tag, status, dataPrevista });
+    });
+    if(couple){ couple.name=name; couple.gb=gb; couple.obs=obs; couple.entregas=entregas; delete couple.tags; }
+    else { ssd.couples.push({ id:uid(), name, gb, obs, entregas }); }
     closeModal(); persist();
-  });
+  }, null, true);
 }
+function cssId(s){ return s.replace(/[^a-zA-Z0-9]/g,'_'); }
+function cssEsc(s){ return s.replace(/(["\\])/g,'\\$1'); }
 function deleteCouple(ssdId, coupleId){
   if(!confirm('Excluir este casal do SSD?')) return;
   const ssd = state.ssds.find(s=>s.id===ssdId);
@@ -708,14 +922,15 @@ function renderHDCard(hd){
         <button class="btn danger small" onclick="deleteHD('${hd.id}')">Excluir</button>
       </div>
     </div>
-    <div class="kpi-sub" style="margin:8px 0 4px;">${years.length? 'Anos: '+years.join(' · ') : 'Sem casamentos'}</div>
+    <div class="kpi-sub mono" style="margin:8px 0 2px;">${hd.capacityGB? fmtGB(hd.capacityGB)+' de capacidade':''}</div>
+    <div class="kpi-sub" style="margin:0 0 4px;">${years.length? 'Anos: '+years.join(' · ') : 'Sem casamentos'}</div>
     <div class="table-wrap" style="margin-top:8px;">
       <table>
         <thead><tr><th>Casal</th><th>Data</th><th>Status</th><th></th></tr></thead>
         <tbody>
         ${hd.weddings.length? hd.weddings.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(w=>`
           <tr>
-            <td>${escapeHtml(w.couple)}</td>
+            <td>${escapeHtml(w.couple)}${w.obs?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(w.obs)}</div>`:''}</td>
             <td class="mono">${fmtDateBR(w.date)}</td>
             <td>${w.status==='completo'?'<span class="badge green">Arquivos completos</span>':'<span class="badge amber">Só arquivos finalizados</span>'}</td>
             <td style="white-space:nowrap;">
@@ -733,11 +948,14 @@ function openHDForm(id){
   showModal(`${hd?'Editar':'Novo'} HD`, `
     <label class="field">Nome</label>
     <input type="text" id="f-name" value="${hd?escapeHtml(hd.name):''}">
+    <label class="field">Capacidade (GB)</label>
+    <input type="number" id="f-cap" class="mono" value="${hd?hd.capacityGB||0:0}">
   `, ()=>{
     const name = document.getElementById('f-name').value.trim();
+    const capacityGB = Number(document.getElementById('f-cap').value)||0;
     if(!name) return alert('Informe um nome.');
-    if(hd) hd.name=name;
-    else state.hds.push({ id:uid(), name, weddings:[] });
+    if(hd){ hd.name=name; hd.capacityGB=capacityGB; }
+    else state.hds.push({ id:uid(), name, capacityGB, weddings:[] });
     closeModal(); persist();
   });
 }
@@ -759,13 +977,16 @@ function openWeddingForm(hdId, wId){
       <option value="completo" ${w&&w.status==='completo'?'selected':''}>Arquivos completos</option>
       <option value="parcial" ${w&&w.status==='parcial'?'selected':''}>Só arquivos finalizados</option>
     </select>
+    <label class="field">Observação (opcional)</label>
+    <input type="text" id="f-obs" value="${w?escapeHtml(w.obs||''):''}">
   `, ()=>{
     const couple = document.getElementById('f-couple').value.trim();
     const date = document.getElementById('f-date').value;
     const status = document.getElementById('f-status').value;
+    const obs = document.getElementById('f-obs').value.trim();
     if(!couple) return alert('Informe o casal.');
-    if(w){ w.couple=couple; w.date=date; w.status=status; }
-    else hd.weddings.push({ id:uid(), couple, date, status });
+    if(w){ w.couple=couple; w.date=date; w.status=status; w.obs=obs; }
+    else hd.weddings.push({ id:uid(), couple, date, status, obs });
     closeModal(); persist();
   });
 }
@@ -1037,7 +1258,7 @@ function renderLeads(){
 
   <div class="table-wrap" style="margin-bottom:26px;">
     <table>
-      <thead><tr><th>Noiva</th><th>Telefone</th><th>Contato</th><th>Local</th><th>Orçamento</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Noiva</th><th>Telefone</th><th>Contato</th><th>Casamento</th><th>Cidade/UF</th><th>Orçamento</th><th>Status</th><th></th></tr></thead>
       <tbody>
       ${filtered.length? filtered.map(l=>{
         let rowCls = '';
@@ -1047,10 +1268,11 @@ function renderLeads(){
         else if(l.status==="Não fechou"||l.status==="Não quero fazer") rowCls='row-dim';
         const showFlag = (l.status==="Pendente resposta"||l.status==="Não respondeu");
         return `<tr class="${rowCls}">
-          <td>${escapeHtml(l.name)}</td>
+          <td>${escapeHtml(l.name)}${l.venueCeremony?`<div class="kpi-sub">${escapeHtml(l.venueCeremony)}</div>`:''}</td>
           <td class="mono">${escapeHtml(l.phone)}</td>
           <td class="mono">${fmtDateBR(l.contactDate)}</td>
-          <td>${escapeHtml(l.venue)}</td>
+          <td class="mono">${l.eventDate?fmtDateBR(l.eventDate):'—'}${l.eventTime?` · ${escapeHtml(l.eventTime)}`:''}</td>
+          <td>${escapeHtml(l.cityState||'')}</td>
           <td class="mono">${fmtBRL(l.budget)}</td>
           <td>
             <select class="inline-select" onchange="updateLeadStatus('${l.id}', this.value)">
@@ -1130,11 +1352,16 @@ function openLeadForm(id){
   const l = id? state.leads.find(x=>x.id===id): null;
   showModal(`${l?'Editar':'Nova'} noiva`, `
     <div class="form-grid">
-      <div class="full"><label class="field">Nome</label><input type="text" id="f-name" value="${l?escapeHtml(l.name):''}"></div>
+      <div class="full"><label class="field">Nome dos noivos</label><input type="text" id="f-name" value="${l?escapeHtml(l.name):''}"></div>
       <div><label class="field">Telefone</label><input type="tel" id="f-phone" value="${l?escapeHtml(l.phone):''}"></div>
       <div><label class="field">Data do contato</label><input type="date" id="f-date" value="${l?l.contactDate:todayISO()}"></div>
+      <div><label class="field">Data do casamento</label><input type="date" id="f-eventdate" value="${l?(l.eventDate||''):''}"></div>
+      <div><label class="field">Horário</label><input type="text" id="f-eventtime" placeholder="ex.: 19h" value="${l?escapeHtml(l.eventTime||''):''}"></div>
+      <div class="full"><label class="field">Local da cerimônia</label><input type="text" id="f-venueceremony" value="${l?escapeHtml(l.venueCeremony||''):''}"></div>
+      <div class="full"><label class="field">Local da recepção</label><input type="text" id="f-venuereception" value="${l?escapeHtml(l.venueReception||''):''}"></div>
+      <div><label class="field">Cidade/Estado</label><input type="text" id="f-citystate" placeholder="ex.: Londrina PR" value="${l?escapeHtml(l.cityState||''):''}"></div>
+      <div><label class="field">Qtd. convidados</label><input type="number" id="f-guests" class="mono" value="${l?(l.guestCount||''):''}"></div>
       <div class="full"><label class="field">Assessoria</label><input type="text" id="f-assessoria" value="${l?escapeHtml(l.assessoria):''}"></div>
-      <div class="full"><label class="field">Onde vai casar</label><input type="text" id="f-venue" value="${l?escapeHtml(l.venue):''}"></div>
       <div><label class="field">Valor do orçamento enviado</label><input type="number" id="f-budget" class="mono" value="${l?l.budget:0}"></div>
       <div><label class="field">Status</label>
         <select id="f-status">${["Pendente resposta","Fechou","Não fechou","Não respondeu","Não quero fazer"].map(s=>`<option value="${s}" ${l&&l.status===s?'selected':''}>${s}</option>`).join('')}</select>
@@ -1144,15 +1371,21 @@ function openLeadForm(id){
     const name = document.getElementById('f-name').value.trim();
     const phone = document.getElementById('f-phone').value.trim();
     const contactDate = document.getElementById('f-date').value;
+    const eventDate = document.getElementById('f-eventdate').value;
+    const eventTime = document.getElementById('f-eventtime').value.trim();
+    const venueCeremony = document.getElementById('f-venueceremony').value.trim();
+    const venueReception = document.getElementById('f-venuereception').value.trim();
+    const cityState = document.getElementById('f-citystate').value.trim();
+    const guestCount = Number(document.getElementById('f-guests').value)||0;
     const assessoria = document.getElementById('f-assessoria').value.trim();
-    const venue = document.getElementById('f-venue').value.trim();
     const budget = Number(document.getElementById('f-budget').value)||0;
     const status = document.getElementById('f-status').value;
     if(!name||!contactDate) return alert('Informe nome e data do contato.');
-    if(l){ Object.assign(l, {name,phone,contactDate,assessoria,venue,budget,status}); }
-    else state.leads.push({ id:uid(), name,phone,contactDate,assessoria,venue,budget,status });
+    const data = {name,phone,contactDate,eventDate,eventTime,venueCeremony,venueReception,cityState,guestCount,assessoria,budget,status};
+    if(l){ Object.assign(l, data); }
+    else state.leads.push({ id:uid(), ...data });
     closeModal(); persist();
-  }, l? ()=>{ if(confirm('Excluir esta noiva?')){ deleteLead(l.id); closeModal(); } } : null);
+  }, l? ()=>{ if(confirm('Excluir esta noiva?')){ deleteLead(l.id); closeModal(); } } : null, true);
 }
 function deleteLead(id){
   if(!confirm('Excluir esta noiva?')) return;

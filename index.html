@@ -325,14 +325,14 @@ function seedState(){
         { id:uid(), name:"Mariana & Lucas", gb:0, entregas:[], obs:"Vídeo em Super 8mm" }
       ]},
       { id:"ssd3", name:"SSD 3", capacityGB:2000, couples:[
-        { id:uid(), name:"Thiago & Rafaela", gb:0, entregas:[ mkEntrega("Teaser"), mkEntrega("Filme") ]},
-        { id:uid(), name:"Anelise & Newton", gb:0, entregas:[ mkEntrega("Filme") ]},
-        { id:uid(), name:"Liê & Kally", gb:0, entregas:[ mkEntrega("Melhores Cenas") ]},
-        { id:uid(), name:"Susana & Lucas", gb:0, entregas:[ mkEntrega("Filme"), mkEntrega("Melhores Cenas") ]},
-        { id:uid(), name:"Érika & Luiz", gb:0, entregas:[], obs:"Pré-wedding e Casamento" },
-        { id:uid(), name:"Mariana Cabelo", gb:0, entregas:[], obs:"Editorial" },
-        { id:uid(), name:"Gabi Vitorelli & Lucas", gb:0, entregas:[] },
-        { id:uid(), name:"Georgia & Lucas", gb:0, entregas:[] }
+        { id:uid(), name:"Thiago & Rafaela", gb:359, entregas:[ mkEntrega("Teaser"), mkEntrega("Filme") ]},
+        { id:uid(), name:"Anelise & Newton", gb:240, entregas:[ mkEntrega("Filme") ]},
+        { id:uid(), name:"Liê & Kally", gb:186, entregas:[ mkEntrega("Melhores Cenas") ]},
+        { id:uid(), name:"Susana & Lucas", gb:589, entregas:[ mkEntrega("Filme"), mkEntrega("Melhores Cenas") ]},
+        { id:uid(), name:"Érika & Luiz", gb:192, entregas:[], obs:"Pré-wedding e Casamento" },
+        { id:uid(), name:"Mariana Cabelo", gb:10, entregas:[], obs:"Editorial" },
+        { id:uid(), name:"Gabi Vitorelli & Lucas", gb:2, entregas:[] },
+        { id:uid(), name:"Georgia & Lucas", gb:12, entregas:[] }
       ]},
       { id:"ssd4", name:"SSD 4", capacityGB:1000, couples:[
         { id:uid(), name:"Gabriela & Felipe", gb:0, entregas:[ mkEntrega("Filme") ]},
@@ -954,7 +954,7 @@ function renderHDCard(hd){
           <tr>
             <td>${escapeHtml(w.couple)}${w.obs?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(w.obs)}</div>`:''}</td>
             <td class="mono">${fmtDateBR(w.date)}</td>
-            <td>${w.status==='completo'?'<span class="badge green">Arquivos completos</span>':'<span class="badge amber">Só arquivos finalizados</span>'}</td>
+            <td>${w.status==='completo'?'<span class="badge green">Completo</span>':'<span class="badge amber">Prontos</span>'}</td>
             <td style="white-space:nowrap;">
               <button class="btn secondary small" onclick="openWeddingForm('${hd.id}','${w.id}')">Editar</button>
               <button class="btn danger small" onclick="deleteWedding('${hd.id}','${w.id}')">Excluir</button>
@@ -996,8 +996,8 @@ function openWeddingForm(hdId, wId){
     <input type="date" id="f-date" value="${w?w.date:todayISO()}">
     <label class="field">Status do backup</label>
     <select id="f-status">
-      <option value="completo" ${w&&w.status==='completo'?'selected':''}>Arquivos completos</option>
-      <option value="parcial" ${w&&w.status==='parcial'?'selected':''}>Só arquivos finalizados</option>
+      <option value="completo" ${w&&w.status==='completo'?'selected':''}>Completo</option>
+      <option value="parcial" ${w&&w.status==='parcial'?'selected':''}>Prontos</option>
     </select>
     <label class="field">Observação (opcional)</label>
     <input type="text" id="f-obs" value="${w?escapeHtml(w.obs||''):''}">

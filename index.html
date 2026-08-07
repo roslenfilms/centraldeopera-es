@@ -112,6 +112,7 @@ main{max-width:1400px; margin:0 auto; padding:24px; padding-bottom:80px;}
 .status-btn.stb-amarelo{background:#FCEFD6; color:#8a6a1f; border-color:#EBD9AA;}
 .status-btn.stb-rosa{background:#F7E2E2; color:#9a4f4f; border-color:#EFC9C9;}
 .status-btn.stb-verde{background:rgba(94,122,74,.16); color:var(--green); border-color:rgba(94,122,74,.35);}
+.status-btn.stb-vermelho{background:rgba(150,66,46,.16); color:var(--red); border-color:rgba(150,66,46,.35);}
 
 .btn{border:1px solid var(--olive-dark); background:var(--olive-dark); color:#fff; padding:9px 16px; border-radius:7px; font-size:13px; font-weight:500;}
 .btn:hover{background:#3c3b21;}
@@ -153,6 +154,8 @@ label.field:first-child{margin-top:0;}
 .row-rose td:first-child{box-shadow:inset 3px 0 0 #c98b8b;}
 .row-rose{background:rgba(201,139,139,.06);}
 .row-amber{background:rgba(166,103,47,.05);}
+.row-red td:first-child{box-shadow:inset 3px 0 0 var(--red);}
+.row-red{background:rgba(150,66,46,.06);}
 .row-green{background:rgba(94,122,74,.05);}
 .row-dim{opacity:.5;}
 .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:#7a7860; margin-bottom:12px;}
@@ -303,6 +306,26 @@ function entregaColor(entrega){
   return "branco";
 }
 
+/* ---- HDs: categorias e migração do status antigo (completo/parcial) para o novo (precisa_apagar/pronto) ---- */
+const HD_CATEGORIES = ["Casamentos","Pré-Weddings","Brides","Noivados","Outros"];
+function classifyHdCategory(obs){
+  const t = (obs||"").toLowerCase();
+  if(t.includes("casamento")) return "Casamentos";
+  if(t.includes("pré") || t.includes("pre-wedding") || t.includes("pre ")) return "Pré-Weddings";
+  if(t.includes("bride")) return "Brides";
+  if(t.includes("noivado")) return "Noivados";
+  return "Outros";
+}
+function migrateHdSchema(){
+  (state.hds||[]).forEach(hd=>{
+    (hd.weddings||[]).forEach(w=>{
+      if(w.status==="completo"){ w.status="precisa_apagar"; }
+      else if(w.status==="parcial"){ w.status="pronto"; }
+      if(!w.category){ w.category = classifyHdCategory(w.obs); }
+    });
+  });
+}
+
 /* ========================= ESTADO / SEED ========================= */
 function seedState(){
   const y = new Date().getFullYear();
@@ -355,8 +378,8 @@ function seedState(){
       ], reserva:true }
     ],
     hds: [
-      { id:"hd1", name:"HD 1", capacityGB:0, weddings:[] },
-      { id:"hd2", name:"HD 2", capacityGB:1250, weddings:[
+      { id:"hd1", name:"HD 1", capacityGB:1000, weddings:[] },
+      { id:"hd2", name:"HD 2", capacityGB:5000, weddings:[
         { id:uid(), couple:"Iasmin & Lucas", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
         { id:uid(), couple:"Marcela & Luiz Felipe", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
         { id:uid(), couple:"Ana Niero & Arthur", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
@@ -394,7 +417,7 @@ function seedState(){
         { id:uid(), couple:"Marina & Eduardo", date:`${y-1}-09-01`, status:"parcial", obs:"Casamento" },
         { id:uid(), couple:"Mariana & Lucas", date:`${y-1}-09-01`, status:"completo", obs:"Ensaio" }
       ]},
-      { id:"hd3", name:"HD 3", capacityGB:443, weddings:[
+      { id:"hd3", name:"HD 3", capacityGB:4000, weddings:[
         { id:uid(), couple:"Rubens & Roberta", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
         { id:uid(), couple:"Luísa & Beto Acorssi", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
         { id:uid(), couple:"Eduarda & Gian", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
@@ -415,7 +438,7 @@ function seedState(){
         { id:uid(), couple:"Sâmia", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding — nome do par a confirmar" },
         { id:uid(), couple:"Daniel & Carla", date:`${y-1}-06-15`, status:"parcial", obs:"Pré-wedding — colocar projeto" }
       ]},
-      { id:"hd4", name:"HD 4", capacityGB:1270, weddings:[
+      { id:"hd4", name:"HD 4", capacityGB:4000, weddings:[
         { id:uid(), couple:"Ana & Rafael", date:`${y}-01-15`, status:"completo", obs:"Casamento" },
         { id:uid(), couple:"Julia & Murilo", date:`${y}-01-15`, status:"completo", obs:"Casamento" },
         { id:uid(), couple:"Larissa & Matheus", date:`${y}-01-15`, status:"completo", obs:"Casamento" },
@@ -444,7 +467,7 @@ function seedState(){
         { id:uid(), couple:"Ana & Eduardo", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" },
         { id:uid(), couple:"Mariana & Victor", date:`${y-1}-06-15`, status:"completo", obs:"Casamento" }
       ]},
-      { id:"hd5", name:"HD 5", capacityGB:900, weddings:[
+      { id:"hd5", name:"HD 5", capacityGB:4000, weddings:[
         { id:uid(), couple:"Gabriela & Felipe", date:`${y}-06-15`, status:"completo", obs:"Casamento" },
         { id:uid(), couple:"Gabriela & Lucas", date:`${y}-06-15`, status:"completo", obs:"Pré-wedding" },
         { id:uid(), couple:"Baby Mahnic", date:`${y}-06-15`, status:"completo", obs:"Revelação" },
@@ -624,6 +647,7 @@ function startPolling(){
         state = remote.conteudo;
         state.meta = state.meta || {};
         state.meta.versao = remote.versao || 0;
+        migrateHdSchema();
         saveLocal();
         renderApp();
         flashNotice("Dados atualizados por outro dispositivo");
@@ -922,47 +946,97 @@ function deleteCouple(ssdId, coupleId){
 }
 
 /* ========================= ABA 3 · HDs / BACKUPS ========================= */
+let hdDetailId = null;
+let hdYearFilter = "Todos";
+let hdCategoryFilter = "Todos";
+let hdStatusFilter = "Todos";
+let hdSortDir = "asc";
+
 function renderHDs(){
-  return `
-  <div class="toolbar">
-    <div><h1 class="page-title">Backups · HDs</h1><p class="page-sub">Cópias de segurança por período.</p></div>
-    <div class="section-actions"><button class="btn secondary" onclick="openHDForm()">+ Novo HD</button></div>
-  </div>
-  <div class="grid grid-2">
-    ${state.hds.map(renderHDCard).join('')}
-  </div>`;
+  if(!hdDetailId){
+    return `
+    <div class="toolbar">
+      <div><h1 class="page-title">Backups · HDs</h1><p class="page-sub">Organização e controle dos HDs.</p></div>
+      <div class="section-actions"><button class="btn secondary" onclick="openHDForm()">+ Novo HD</button></div>
+    </div>
+    <div class="grid grid-2">
+      ${state.hds.map(renderHDSummaryCard).join('')}
+    </div>`;
+  }
+  const hd = state.hds.find(h=>h.id===hdDetailId);
+  if(!hd){ hdDetailId=null; return renderHDs(); }
+  return renderHDDetail(hd);
 }
-function renderHDCard(hd){
-  const years = [...new Set(hd.weddings.map(w=>(w.date||'').slice(0,4)).filter(Boolean))].sort();
+function renderHDSummaryCard(hd){
+  const pending = hd.weddings.filter(w=>w.status==='precisa_apagar').length;
+  const years = [...new Set(hd.weddings.map(w=>(w.date||'').slice(0,4)))].filter(Boolean).sort();
   return `
-  <div class="card">
+  <div class="card clickable" onclick="hdDetailId='${hd.id}';hdYearFilter='Todos';hdCategoryFilter='Todos';hdStatusFilter='Todos';renderApp();">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
       <h3 style="margin:0;font-size:19px;">${escapeHtml(hd.name)}</h3>
-      <div class="section-actions">
-        <button class="btn secondary small" onclick="openWeddingForm('${hd.id}')">+ Casamento</button>
-        <button class="btn secondary small" onclick="openHDForm('${hd.id}')">Editar</button>
-        <button class="btn danger small" onclick="deleteHD('${hd.id}')">Excluir</button>
-      </div>
+      ${pending? `<span class="badge red">🔴 ${pending} p/ apagar</span>` : `<span class="badge green">🟢 em dia</span>`}
     </div>
-    <div class="kpi-sub mono" style="margin:8px 0 2px;">${hd.capacityGB? fmtGB(hd.capacityGB)+' de capacidade':''}</div>
-    <div class="kpi-sub" style="margin:0 0 4px;">${years.length? 'Anos: '+years.join(' · ') : 'Sem casamentos'}</div>
-    <div class="table-wrap" style="margin-top:8px;">
-      <table>
-        <thead><tr><th>Casal</th><th>Data</th><th>Status</th><th></th></tr></thead>
-        <tbody>
-        ${hd.weddings.length? hd.weddings.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(w=>`
-          <tr>
-            <td>${escapeHtml(w.couple)}${w.obs?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(w.obs)}</div>`:''}</td>
-            <td class="mono">${fmtDateBR(w.date)}</td>
-            <td>${w.status==='completo'?'<span class="badge green">Completo</span>':'<span class="badge amber">Prontos</span>'}</td>
-            <td style="white-space:nowrap;">
-              <button class="btn secondary small" onclick="openWeddingForm('${hd.id}','${w.id}')">Editar</button>
-              <button class="btn danger small" onclick="deleteWedding('${hd.id}','${w.id}')">Excluir</button>
-            </td>
-          </tr>`).join('') : `<tr><td colspan="4" style="text-align:center;color:#a5a38c;">Nenhum casamento neste HD.</td></tr>`}
-        </tbody>
-      </table>
+    <div class="kpi-sub mono" style="margin-top:6px;">${hd.capacityGB? fmtGB(hd.capacityGB)+' de capacidade':''}</div>
+    <div class="kpi-sub">${hd.weddings.length} trabalho${hd.weddings.length!==1?'s':''} · Anos: ${years.join(' · ')||'—'}</div>
+  </div>`;
+}
+function renderHDDetail(hd){
+  const years = [...new Set(hd.weddings.map(w=>(w.date||'').slice(0,4)))].filter(Boolean).sort();
+  let list = hd.weddings.slice();
+  if(hdYearFilter!=='Todos') list = list.filter(w=>(w.date||'').startsWith(hdYearFilter));
+  if(hdCategoryFilter!=='Todos') list = list.filter(w=>(w.category||'Outros')===hdCategoryFilter);
+  if(hdStatusFilter!=='Todos') list = list.filter(w=>w.status===hdStatusFilter);
+  list.sort((a,b)=> hdSortDir==='asc'? (a.date||'').localeCompare(b.date||'') : (b.date||'').localeCompare(a.date||''));
+  const pendingCount = hd.weddings.filter(w=>w.status==='precisa_apagar').length;
+
+  return `
+  <button class="btn secondary small" onclick="hdDetailId=null;renderApp();" style="margin-bottom:14px;">← Voltar para todos os HDs</button>
+  <div class="toolbar">
+    <div><h1 class="page-title">${escapeHtml(hd.name)}</h1><p class="page-sub">${hd.capacityGB?fmtGB(hd.capacityGB)+' de capacidade · ':''}${pendingCount} trabalho${pendingCount!==1?'s':''} precisando ser apagado${pendingCount!==1?'s':''} do HD</p></div>
+    <div class="section-actions">
+      <button class="btn secondary" onclick="openHDForm('${hd.id}')">Editar HD</button>
+      <button class="btn danger" onclick="deleteHD('${hd.id}')">Excluir HD</button>
+      <button class="btn" onclick="openWeddingForm('${hd.id}')">+ Trabalho</button>
     </div>
+  </div>
+
+  <div class="pill-group" style="margin-bottom:10px;">
+    <button class="pill ${hdYearFilter==='Todos'?'active':''}" onclick="hdYearFilter='Todos';renderApp()">Todos os anos</button>
+    ${years.map(y=>`<button class="pill ${hdYearFilter===y?'active':''}" onclick="hdYearFilter='${y}';renderApp()">${y}</button>`).join('')}
+  </div>
+  <div class="pill-group" style="margin-bottom:10px;">
+    <button class="pill ${hdCategoryFilter==='Todos'?'active':''}" onclick="hdCategoryFilter='Todos';renderApp()">Todas categorias</button>
+    ${HD_CATEGORIES.map(c=>`<button class="pill ${hdCategoryFilter===c?'active':''}" onclick="hdCategoryFilter='${c}';renderApp()">${c}</button>`).join('')}
+  </div>
+  <div class="pill-group" style="margin-bottom:18px;">
+    <button class="pill ${hdStatusFilter==='Todos'?'active':''}" onclick="hdStatusFilter='Todos';renderApp()">Todos</button>
+    <button class="pill ${hdStatusFilter==='precisa_apagar'?'active':''}" onclick="hdStatusFilter='precisa_apagar';renderApp()">🔴 Precisa apagar</button>
+    <button class="pill ${hdStatusFilter==='pronto'?'active':''}" onclick="hdStatusFilter='pronto';renderApp()">🟢 Prontos</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Casal</th>
+        <th>Categoria</th>
+        <th style="cursor:pointer;white-space:nowrap;" onclick="hdSortDir=hdSortDir==='asc'?'desc':'asc';renderApp();">Data da gravação ${hdSortDir==='asc'?'↑':'↓'}</th>
+        <th>Status</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+      ${list.length? list.map(w=>`
+        <tr class="${w.status==='precisa_apagar'?'row-red':''}">
+          <td>${escapeHtml(w.couple)}${w.obs?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(w.obs)}</div>`:''}</td>
+          <td>${escapeHtml(w.category||'Outros')}</td>
+          <td class="mono">${fmtDateBR(w.date)}</td>
+          <td>${w.status==='precisa_apagar'?'<span class="badge red">🔴 Precisa apagar</span>':'<span class="badge green">🟢 Pronto</span>'}</td>
+          <td style="white-space:nowrap;">
+            <button class="btn secondary small" onclick="openWeddingForm('${hd.id}','${w.id}')">Editar</button>
+            <button class="btn danger small" onclick="deleteWedding('${hd.id}','${w.id}')">Excluir</button>
+          </td>
+        </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:#a5a38c;">Nenhum trabalho neste filtro.</td></tr>`}
+      </tbody>
+    </table>
   </div>`;
 }
 function openHDForm(id){
@@ -982,38 +1056,45 @@ function openHDForm(id){
   });
 }
 function deleteHD(id){
-  if(!confirm('Excluir este HD e os registros de casamentos nele?')) return;
+  if(!confirm('Excluir este HD e os registros de trabalhos nele?')) return;
   state.hds = state.hds.filter(h=>h.id!==id);
+  if(hdDetailId===id) hdDetailId=null;
   persist();
 }
 function openWeddingForm(hdId, wId){
   const hd = state.hds.find(h=>h.id===hdId);
   const w = wId ? hd.weddings.find(x=>x.id===wId) : null;
-  showModal(`${w?'Editar':'Novo'} casamento`, `
+  showModal(`${w?'Editar':'Novo'} trabalho`, `
     <label class="field">Casal</label>
     <input type="text" id="f-couple" value="${w?escapeHtml(w.couple):''}">
-    <label class="field">Data do casamento</label>
+    <label class="field">Data da gravação</label>
     <input type="date" id="f-date" value="${w?w.date:todayISO()}">
-    <label class="field">Status do backup</label>
-    <select id="f-status">
-      <option value="completo" ${w&&w.status==='completo'?'selected':''}>Completo</option>
-      <option value="parcial" ${w&&w.status==='parcial'?'selected':''}>Prontos</option>
+    <label class="field">Categoria</label>
+    <select id="f-category">
+      ${HD_CATEGORIES.map(c=>`<option value="${c}" ${w&&w.category===c?'selected':''}>${c}</option>`).join('')}
     </select>
+    <label class="field">Status</label>
+    <div class="status-btns" data-tag="wstatus">
+      <button type="button" class="status-btn stb-verde ${(!w||w.status==='pronto')?'selected':''}" data-status="pronto" onclick="selectEstatus(this)">🟢 Pronto</button>
+      <button type="button" class="status-btn stb-vermelho ${w&&w.status==='precisa_apagar'?'selected':''}" data-status="precisa_apagar" onclick="selectEstatus(this)">🔴 Precisa apagar</button>
+    </div>
     <label class="field">Observação (opcional)</label>
     <input type="text" id="f-obs" value="${w?escapeHtml(w.obs||''):''}">
   `, ()=>{
     const couple = document.getElementById('f-couple').value.trim();
     const date = document.getElementById('f-date').value;
-    const status = document.getElementById('f-status').value;
+    const category = document.getElementById('f-category').value;
+    const selBtn = document.querySelector('.status-btns[data-tag="wstatus"] .status-btn.selected');
+    const status = selBtn ? selBtn.dataset.status : 'pronto';
     const obs = document.getElementById('f-obs').value.trim();
     if(!couple) return alert('Informe o casal.');
-    if(w){ w.couple=couple; w.date=date; w.status=status; w.obs=obs; }
-    else hd.weddings.push({ id:uid(), couple, date, status, obs });
+    if(w){ w.couple=couple; w.date=date; w.category=category; w.status=status; w.obs=obs; }
+    else hd.weddings.push({ id:uid(), couple, date, category, status, obs });
     closeModal(); persist();
-  });
+  }, w? ()=>{ if(confirm('Excluir este registro?')){ deleteWedding(hd.id, w.id); closeModal(); } } : null);
 }
 function deleteWedding(hdId, wId){
-  if(!confirm('Excluir este registro de casamento?')) return;
+  if(!confirm('Excluir este registro de trabalho?')) return;
   const hd = state.hds.find(h=>h.id===hdId);
   hd.weddings = hd.weddings.filter(w=>w.id!==wId);
   persist();
@@ -1958,6 +2039,7 @@ async function boot(){
   renderHeaderDate();
   document.getElementById('gearBtn').addEventListener('click', openSetupModal);
   await initState();
+  migrateHdSchema();
   renderApp();
 }
 boot();

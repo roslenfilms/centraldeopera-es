@@ -341,6 +341,72 @@ function migrateHdSchema(){
   });
 }
 
+/* ---- Pós-Produção: editores, status, prazos ---- */
+const EDITORES = ["Sônia","Gabriel","Mariana","Lucas"];
+const PP_STATUSES = [
+  "Evento futuro","Material aguardando backup","Backup realizado","Aguardando edição","Em edição",
+  "Primeiro corte","Aguardando revisão interna","Correções internas","Aguardando cliente",
+  "Correção solicitada pelo cliente","Correção em andamento","Pronto para entrega","Entrega pendente",
+  "Entregue","Arquivado"
+];
+const PP_STATUS_GROUP = {
+  "Evento futuro":"aguardando", "Material aguardando backup":"aguardando", "Backup realizado":"aguardando", "Aguardando edição":"aguardando",
+  "Em edição":"edicao", "Primeiro corte":"edicao",
+  "Aguardando revisão interna":"correcao", "Correções internas":"correcao", "Aguardando cliente":"correcao",
+  "Correção solicitada pelo cliente":"correcao", "Correção em andamento":"correcao",
+  "Pronto para entrega":"pendente", "Entrega pendente":"pendente",
+  "Entregue":"entregue", "Arquivado":"entregue"
+};
+const PP_DEFAULT_EDIT_DAYS = 20; // margem padrão: dias úteis de edição estimados antes do prazo limite, usada para sugerir início
+
+function addDaysCorridos(iso, n){
+  const d = parseISO(iso); if(!d) return "";
+  d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+function addDaysUteis(iso, n){
+  const d = parseISO(iso); if(!d) return "";
+  let count=0, dir = n>=0?1:-1, target = Math.abs(n);
+  while(count < target){
+    d.setDate(d.getDate()+dir);
+    const dow = d.getDay();
+    if(dow!==0 && dow!==6) count++;
+  }
+  return d.toISOString().slice(0,10);
+}
+function calcPrazoLimite(eventDate, prazoDias, prazoTipo){
+  if(!eventDate || !prazoDias) return "";
+  return prazoTipo==='corridos' ? addDaysCorridos(eventDate, Number(prazoDias)) : addDaysUteis(eventDate, Number(prazoDias));
+}
+function calcDataSugeridaInicio(prazoLimite, margemDias){
+  if(!prazoLimite) return "";
+  return addDaysUteis(prazoLimite, -(margemDias||PP_DEFAULT_EDIT_DAYS));
+}
+function prazoIndicador(diasRestantes, status){
+  if(status==='Entregue' || status==='Arquivado') return null;
+  if(diasRestantes===null || diasRestantes===undefined) return null;
+  if(diasRestantes<0) return {label:'Atrasado', cls:'red'};
+  if(diasRestantes<15) return {label:'Urgente', cls:'red'};
+  if(diasRestantes<=30) return {label:'Atenção', cls:'amber'};
+  return {label:'No prazo', cls:'green'};
+}
+function editorInitials(name){
+  if(!name) return '—';
+  return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+}
+function allProjects(){
+  // "Projeto" = casal dentro de um SSD (fonte única — não duplica cadastro)
+  const list = [];
+  state.ssds.forEach(ssd=>{
+    ssd.couples.forEach(c=>{
+      const prazoLimite = calcPrazoLimite(c.eventDate, c.prazoDias, c.prazoTipo);
+      const diasRestantes = prazoLimite? diasAte(prazoLimite) : null;
+      list.push({ ssd, couple:c, prazoLimite, diasRestantes });
+    });
+  });
+  return list;
+}
+
 /* ========================= ESTADO / SEED ========================= */
 function seedState(){
   const y = new Date().getFullYear();
@@ -686,6 +752,7 @@ function flashNotice(msg){
 const TABS = [
   { id:"overview", label:"Visão Geral" },
   { id:"ssds", label:"SSDs de trabalho" },
+  { id:"pp", label:"Pós-Produção" },
   { id:"hds", label:"Backups · HDs" },
   { id:"agenda", label:"Agenda" },
   { id:"leads", label:"Leads WhatsApp" },
@@ -750,7 +817,7 @@ function renderApp(){
     app.innerHTML = renderPasswordGate();
     return;
   }
-  const fns = { overview:renderOverview, ssds:renderSSDs, hds:renderHDs, agenda:renderAgenda, leads:renderLeads, fin:renderFin };
+  const fns = { overview:renderOverview, ssds:renderSSDs, pp:renderPP, hds:renderHDs, agenda:renderAgenda, leads:renderLeads, fin:renderFin };
   app.innerHTML = (fns[currentTab] || renderOverview)();
 }
 
@@ -927,12 +994,18 @@ function renderSSDCard(ssd){
     <div class="kpi-sub mono">${fmtGB(used)} usado · ${fmtGB(Math.max(0,ssd.capacityGB-used))} livre · ${fmtGB(ssd.capacityGB)} total</div>
     <div class="table-wrap" style="margin-top:14px;">
       <table>
-        <thead><tr><th>Casal</th><th>GB</th><th>Entregas</th><th></th></tr></thead>
+        <thead><tr><th>Casal</th><th>GB</th><th>Editor</th><th>Prazo</th><th>Entregas</th><th></th></tr></thead>
         <tbody>
-        ${ssd.couples.length? ssd.couples.map(c=>`
+        ${ssd.couples.length? ssd.couples.map(c=>{
+          const prazoLimite = calcPrazoLimite(c.eventDate, c.prazoDias, c.prazoTipo);
+          const diasRestantes = prazoLimite? diasAte(prazoLimite) : null;
+          const ind = prazoIndicador(diasRestantes, c.ppStatus);
+          return `
           <tr>
             <td>${escapeHtml(c.name)}${c.obs?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(c.obs)}</div>`:''}</td>
             <td class="mono">${fmtGB(c.gb)}</td>
+            <td>${c.editorPrincipal? `<span class="badge blue" title="${escapeHtml(c.editorPrincipal)}">${editorInitials(c.editorPrincipal)}</span>` : '<span class="kpi-sub">—</span>'}</td>
+            <td>${prazoLimite? `<div class="mono" style="font-size:12px;">${fmtDateBR(prazoLimite)}</div>${ind?`<span class="badge ${ind.cls}" style="margin-top:3px;display:inline-block;">${ind.label}</span>`:''}` : '<span class="kpi-sub">—</span>'}</td>
             <td>${(c.entregas&&c.entregas.length)? c.entregas.map(e=>{
               const col = entregaColor(e);
               return `<span class="dtag st-${col}">${escapeHtml(e.tag)}${e.dataPrevista?`<span class="dt-date">${fmtDateBR(e.dataPrevista)}</span>`:''}</span>`;
@@ -941,7 +1014,8 @@ function renderSSDCard(ssd){
               <button class="btn secondary small" onclick="openCoupleForm('${ssd.id}','${c.id}')">Editar</button>
               <button class="btn danger small" onclick="deleteCouple('${ssd.id}','${c.id}')">Excluir</button>
             </td>
-          </tr>`).join('') : `<tr><td colspan="4" style="text-align:center;color:#a5a38c;">Nenhum casal neste SSD.</td></tr>`}
+          </tr>`;
+        }).join('') : `<tr><td colspan="6" style="text-align:center;color:#a5a38c;">Nenhum casal neste SSD.</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -982,10 +1056,42 @@ function openCoupleForm(ssdId, coupleId){
     { value:"Entregue", label:"Finalizado", cls:"stb-verde" }
   ];
   showModal(`${couple?'Editar':'Novo'} casal`, `
-    <label class="field">Nome do casal</label>
-    <input type="text" id="f-name" value="${couple?escapeHtml(couple.name):''}">
-    <label class="field">GB ocupados</label>
-    <input type="number" id="f-gb" class="mono" value="${couple?couple.gb:0}">
+    <div class="form-grid">
+      <div class="full"><label class="field">Nome do casal</label><input type="text" id="f-name" value="${couple?escapeHtml(couple.name):''}"></div>
+      <div><label class="field">GB ocupados</label><input type="number" id="f-gb" class="mono" value="${couple?couple.gb:0}"></div>
+      <div><label class="field">Data do evento</label><input type="date" id="f-eventdate" value="${couple?(couple.eventDate||''):''}"></div>
+      <div><label class="field">Editor responsável</label>
+        <select id="f-editor1">
+          <option value="">Não definido</option>
+          ${EDITORES.map(e=>`<option value="${e}" ${couple&&couple.editorPrincipal===e?'selected':''}>${e}</option>`).join('')}
+        </select>
+      </div>
+      <div><label class="field">Editor secundário (opcional)</label>
+        <select id="f-editor2">
+          <option value="">Nenhum</option>
+          ${EDITORES.map(e=>`<option value="${e}" ${couple&&couple.editorSecundario===e?'selected':''}>${e}</option>`).join('')}
+        </select>
+      </div>
+      <div class="full"><label class="field">Status de pós-produção</label>
+        <select id="f-ppstatus">
+          ${PP_STATUSES.map(s=>`<option value="${s}" ${couple&&couple.ppStatus===s?'selected':(!couple&&s==='Evento futuro'?'selected':'')}>${s}</option>`).join('')}
+        </select>
+      </div>
+      <div><label class="field">Prazo contratual (nº)</label><input type="number" id="f-prazodias" class="mono" value="${couple?(couple.prazoDias||''):''}"></div>
+      <div><label class="field">Tipo de prazo</label>
+        <select id="f-prazotipo">
+          <option value="uteis" ${!couple||couple.prazoTipo==='uteis'?'selected':''}>Dias úteis</option>
+          <option value="corridos" ${couple&&couple.prazoTipo==='corridos'?'selected':''}>Dias corridos</option>
+        </select>
+      </div>
+      <div><label class="field">Contrato anexado?</label>
+        <select id="f-contrato">
+          <option value="nao" ${!couple||!couple.contratoAnexado?'selected':''}>Não</option>
+          <option value="sim" ${couple&&couple.contratoAnexado?'selected':''}>Sim</option>
+        </select>
+      </div>
+      <div><label class="field">Onde está guardado</label><input type="text" id="f-contratolocal" placeholder="ex.: Google Drive, pasta local..." value="${couple?escapeHtml(couple.contratoLocal||''):''}"></div>
+    </div>
     <label class="field">Observação (opcional)</label>
     <input type="text" id="f-obs" value="${couple?escapeHtml(couple.obs||''):''}">
     <label class="field">Entregas — marque as que fazem parte do contrato</label>
@@ -1017,6 +1123,14 @@ function openCoupleForm(ssdId, coupleId){
     const name = document.getElementById('f-name').value.trim();
     const gb = Number(document.getElementById('f-gb').value)||0;
     const obs = document.getElementById('f-obs').value.trim();
+    const eventDate = document.getElementById('f-eventdate').value;
+    const editorPrincipal = document.getElementById('f-editor1').value;
+    const editorSecundario = document.getElementById('f-editor2').value;
+    const ppStatus = document.getElementById('f-ppstatus').value;
+    const prazoDias = Number(document.getElementById('f-prazodias').value)||0;
+    const prazoTipo = document.getElementById('f-prazotipo').value;
+    const contratoAnexado = document.getElementById('f-contrato').value === 'sim';
+    const contratoLocal = document.getElementById('f-contratolocal').value.trim();
     if(!name) return alert('Informe o nome do casal.');
     const entregas = [];
     document.querySelectorAll('.f-etag:checked').forEach(cb=>{
@@ -1026,8 +1140,13 @@ function openCoupleForm(ssdId, coupleId){
       const dataPrevista = document.querySelector(`.f-edata[data-tag="${cssEsc(tag)}"]`).value;
       entregas.push({ tag, status, dataPrevista });
     });
-    if(couple){ couple.name=name; couple.gb=gb; couple.obs=obs; couple.entregas=entregas; delete couple.tags; }
-    else { ssd.couples.push({ id:uid(), name, gb, obs, entregas }); }
+    const now = new Date().toISOString();
+    if(couple){
+      Object.assign(couple, {name,gb,obs,entregas,eventDate,editorPrincipal,editorSecundario,ppStatus,prazoDias,prazoTipo,contratoAnexado,contratoLocal,updatedAt:now});
+      delete couple.tags;
+    } else {
+      ssd.couples.push({ id:uid(), name, gb, obs, entregas, eventDate, editorPrincipal, editorSecundario, ppStatus, prazoDias, prazoTipo, contratoAnexado, contratoLocal, createdAt:now, updatedAt:now });
+    }
     closeModal(); persist();
   }, null, true);
 }
@@ -1043,6 +1162,245 @@ function deleteCouple(ssdId, coupleId){
   const ssd = state.ssds.find(s=>s.id===ssdId);
   ssd.couples = ssd.couples.filter(c=>c.id!==coupleId);
   persist();
+}
+
+/* ========================= ABA · PÓS-PRODUÇÃO ========================= */
+let ppSubTab = "visao";
+let ppEditorFilter = "Todos";
+let ppDashFilter = null;
+let ppCronoView = "semana";
+let ppCronoDate = new Date();
+
+function renderPP(){
+  return `
+  <div class="toolbar">
+    <div><h1 class="page-title">Pós-Produção</h1><p class="page-sub">Fluxo de edição, prazos e equipe.</p></div>
+  </div>
+  <div class="pill-group" style="margin-bottom:20px;">
+    ${[["visao","Visão Geral"],["equipe","Equipe"],["correcoes","Correções"],["pendentes","Entregas Pendentes"],["cronograma","Cronograma"]]
+      .map(([k,l])=>`<button class="pill ${ppSubTab===k?'active':''}" onclick="ppSubTab='${k}';ppDashFilter=null;renderApp()">${l}</button>`).join('')}
+  </div>
+  ${ {visao:renderPPVisaoGeral, equipe:renderPPEquipe, correcoes:renderPPCorrecoes, pendentes:renderPPPendentes, cronograma:renderPPCronograma}[ppSubTab]() }
+  `;
+}
+
+function ppFilteredProjects(){
+  let list = allProjects();
+  if(ppEditorFilter!=='Todos'){
+    list = list.filter(p=> p.couple.editorPrincipal===ppEditorFilter || p.couple.editorSecundario===ppEditorFilter);
+  }
+  return list;
+}
+
+function renderPPVisaoGeral(){
+  const projects = ppFilteredProjects();
+  const groupCount = g => projects.filter(p=> PP_STATUS_GROUP[p.couple.ppStatus||'Evento futuro']===g).length;
+  const atrasados = projects.filter(p=> p.diasRestantes!==null && p.diasRestantes<0 && !['Entregue','Arquivado'].includes(p.couple.ppStatus)).length;
+  const monthKey = todayISO().slice(0,7);
+  const entreguesNoMes = projects.filter(p=> p.couple.ppStatus==='Entregue' && p.couple.updatedAt && p.couple.updatedAt.slice(0,7)===monthKey).length;
+
+  const cards = [
+    { key:'edicao', label:'Em edição', value:groupCount('edicao') },
+    { key:'aguardando', label:'Aguardando edição', value:groupCount('aguardando') },
+    { key:'correcao', label:'Correções', value:groupCount('correcao') },
+    { key:'pendente', label:'Entregas pendentes', value:groupCount('pendente') },
+    { key:'atrasado', label:'Atrasados', value:atrasados },
+    { key:'entregue_mes', label:'Entregues no mês', value:entreguesNoMes }
+  ];
+
+  let list = projects;
+  if(ppDashFilter==='atrasado') list = projects.filter(p=> p.diasRestantes!==null && p.diasRestantes<0 && !['Entregue','Arquivado'].includes(p.couple.ppStatus));
+  else if(ppDashFilter==='entregue_mes') list = projects.filter(p=> p.couple.ppStatus==='Entregue' && p.couple.updatedAt && p.couple.updatedAt.slice(0,7)===monthKey);
+  else if(ppDashFilter) list = projects.filter(p=> PP_STATUS_GROUP[p.couple.ppStatus||'Evento futuro']===ppDashFilter);
+
+  return `
+  <div class="pill-group" style="margin-bottom:16px;">
+    <button class="pill ${ppEditorFilter==='Todos'?'active':''}" onclick="ppEditorFilter='Todos';renderApp()">Todos</button>
+    ${EDITORES.map(e=>`<button class="pill ${ppEditorFilter===e?'active':''}" onclick="ppEditorFilter='${e}';renderApp()">${e}</button>`).join('')}
+  </div>
+  <div class="grid grid-3" style="margin-bottom:22px;">
+    ${cards.map(c=>`
+      <div class="card clickable" onclick="ppDashFilter=ppDashFilter==='${c.key}'?null:'${c.key}';renderApp()" style="${ppDashFilter===c.key?'border-color:var(--olive);':''}">
+        <div class="kpi-label">${c.label}</div>
+        <div class="kpi-value">${c.value}</div>
+      </div>`).join('')}
+  </div>
+  ${renderPPProjectTable(list)}
+  `;
+}
+function renderPPProjectTable(list){
+  return `
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Projeto</th><th>SSD</th><th>Data evento</th><th>Editor</th><th>Status</th><th>Prazo limite</th><th>Dias restantes</th><th></th></tr></thead>
+      <tbody>
+      ${list.length? list.slice().sort((a,b)=>(a.diasRestantes??9999)-(b.diasRestantes??9999)).map(p=>{
+        const ind = prazoIndicador(p.diasRestantes, p.couple.ppStatus);
+        return `<tr>
+          <td>${escapeHtml(p.couple.name)}${p.couple.contratoAnexado?` <span title="Contrato anexado${p.couple.contratoLocal?': '+escapeHtml(p.couple.contratoLocal):''}">📎</span>`:''}</td>
+          <td>${escapeHtml(p.ssd.name)}</td>
+          <td class="mono">${p.couple.eventDate?fmtDateBR(p.couple.eventDate):'—'}</td>
+          <td>${p.couple.editorPrincipal? escapeHtml(p.couple.editorPrincipal) : '<span class="kpi-sub">—</span>'}${p.couple.editorSecundario?` + ${escapeHtml(p.couple.editorSecundario)}`:''}</td>
+          <td><span class="badge grey">${escapeHtml(p.couple.ppStatus||'Evento futuro')}</span></td>
+          <td class="mono">${p.prazoLimite?fmtDateBR(p.prazoLimite):'—'}</td>
+          <td class="mono">${p.diasRestantes!==null? p.diasRestantes+'d' : '—'} ${ind?`<span class="badge ${ind.cls}">${ind.label}</span>`:''}</td>
+          <td><button class="btn secondary small" onclick="openCoupleForm('${p.ssd.id}','${p.couple.id}')">Abrir</button></td>
+        </tr>`;
+      }).join('') : `<tr><td colspan="8" style="text-align:center;color:#a5a38c;">Nenhum projeto neste filtro.</td></tr>`}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderPPEquipe(){
+  const projects = allProjects();
+  return `
+  <div class="grid grid-2">
+    ${EDITORES.map(ed=>{
+      const mine = projects.filter(p=> p.couple.editorPrincipal===ed || p.couple.editorSecundario===ed);
+      const emEdicao = mine.filter(p=>PP_STATUS_GROUP[p.couple.ppStatus||'Evento futuro']==='edicao').length;
+      const aguardando = mine.filter(p=>PP_STATUS_GROUP[p.couple.ppStatus||'Evento futuro']==='aguardando').length;
+      const correcao = mine.filter(p=>PP_STATUS_GROUP[p.couple.ppStatus||'Evento futuro']==='correcao').length;
+      const proximos30 = mine.filter(p=> p.diasRestantes!==null && p.diasRestantes>=0 && p.diasRestantes<=30 && !['Entregue','Arquivado'].includes(p.couple.ppStatus)).length;
+      return `
+      <div class="card clickable" onclick="ppSubTab='visao';ppEditorFilter='${ed}';ppDashFilter=null;renderApp()">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span class="badge blue" style="font-size:14px;padding:8px 12px;">${editorInitials(ed)}</span>
+          <h3 class="serif" style="margin:0;font-size:20px;">${ed}</h3>
+        </div>
+        <div class="grid grid-2" style="gap:10px;">
+          <div><div class="kpi-label">Projetos</div><div class="kpi-value" style="font-size:20px;">${mine.length}</div></div>
+          <div><div class="kpi-label">Em edição</div><div class="kpi-value" style="font-size:20px;">${emEdicao}</div></div>
+          <div><div class="kpi-label">Aguardando</div><div class="kpi-value" style="font-size:20px;">${aguardando}</div></div>
+          <div><div class="kpi-label">Em correção</div><div class="kpi-value" style="font-size:20px;">${correcao}</div></div>
+        </div>
+        <div class="kpi-sub" style="margin-top:10px;">${proximos30} entrega${proximos30!==1?'s':''} nos próximos 30 dias</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderPPCorrecoes(){
+  const projects = ppFilteredProjects().filter(p=> PP_STATUS_GROUP[p.couple.ppStatus||'']==='correcao');
+  return `
+  <div class="pill-group" style="margin-bottom:16px;">
+    <button class="pill ${ppEditorFilter==='Todos'?'active':''}" onclick="ppEditorFilter='Todos';renderApp()">Todos</button>
+    ${EDITORES.map(e=>`<button class="pill ${ppEditorFilter===e?'active':''}" onclick="ppEditorFilter='${e}';renderApp()">${e}</button>`).join('')}
+  </div>
+  ${renderPPProjectTable(projects)}`;
+}
+
+function renderPPPendentes(){
+  const items = [];
+  state.ssds.forEach(ssd=>{
+    ssd.couples.forEach(c=>{
+      if(ppEditorFilter!=='Todos' && c.editorPrincipal!==ppEditorFilter && c.editorSecundario!==ppEditorFilter) return;
+      (c.entregas||[]).forEach(e=>{
+        if(e.status!=='Entregue'){
+          items.push({ ssd, couple:c, entrega:e, dias: e.dataPrevista? diasAte(e.dataPrevista) : null });
+        }
+      });
+    });
+  });
+  items.sort((a,b)=>(a.dias??9999)-(b.dias??9999));
+  return `
+  <div class="pill-group" style="margin-bottom:16px;">
+    <button class="pill ${ppEditorFilter==='Todos'?'active':''}" onclick="ppEditorFilter='Todos';renderApp()">Todos</button>
+    ${EDITORES.map(e=>`<button class="pill ${ppEditorFilter===e?'active':''}" onclick="ppEditorFilter='${e}';renderApp()">${e}</button>`).join('')}
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Projeto</th><th>Entregável</th><th>Editor</th><th>Prazo</th><th>Dias restantes</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      ${items.length? items.map(it=>`
+        <tr>
+          <td>${escapeHtml(it.couple.name)}</td>
+          <td>${escapeHtml(it.entrega.tag)}</td>
+          <td>${it.couple.editorPrincipal? escapeHtml(it.couple.editorPrincipal) : '<span class="kpi-sub">—</span>'}</td>
+          <td class="mono">${it.entrega.dataPrevista?fmtDateBR(it.entrega.dataPrevista):'—'}</td>
+          <td class="mono">${it.dias!==null? it.dias+'d' : '—'}</td>
+          <td><span class="dtag st-${entregaColor(it.entrega)}">${escapeHtml(it.entrega.status)}</span></td>
+          <td><button class="btn secondary small" onclick="openCoupleForm('${it.ssd.id}','${it.couple.id}')">Abrir</button></td>
+        </tr>`).join('') : `<tr><td colspan="7" style="text-align:center;color:#a5a38c;">Nenhuma entrega pendente.</td></tr>`}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderPPCronograma(){
+  return `
+  <div class="pill-group" style="margin-bottom:16px;">
+    <button class="pill ${ppCronoView==='semana'?'active':''}" onclick="ppCronoView='semana';renderApp()">Semana</button>
+    <button class="pill ${ppCronoView==='mes'?'active':''}" onclick="ppCronoView='mes';renderApp()">Mês</button>
+  </div>
+  ${ppCronoView==='semana'? renderPPCronoSemana() : renderPPCronoMes()}`;
+}
+function renderPPCronoSemana(){
+  const d = new Date(ppCronoDate);
+  const dow = d.getDay();
+  const monday = new Date(d); monday.setDate(d.getDate() - ((dow+6)%7));
+  const days = [...Array(7)].map((_,i)=>{ const x=new Date(monday); x.setDate(monday.getDate()+i); return x.toISOString().slice(0,10); });
+  const projects = ppFilteredProjects();
+
+  return `
+  <div class="cal-head">
+    <div class="cal-nav">
+      <button onclick="ppCronoDate=new Date('${days[0]}T12:00:00');ppCronoDate.setDate(ppCronoDate.getDate()-7);renderApp()">‹</button>
+      <span class="serif" style="font-size:17px;">${fmtDateBR(days[0])} – ${fmtDateBR(days[6])}</span>
+      <button onclick="ppCronoDate=new Date('${days[0]}T12:00:00');ppCronoDate.setDate(ppCronoDate.getDate()+7);renderApp()">›</button>
+    </div>
+    <button class="btn secondary small" onclick="ppCronoDate=new Date();renderApp()">Hoje</button>
+  </div>
+  <div class="cal-grid" style="grid-template-columns:repeat(7,1fr);">
+    ${days.map(iso=>`<div class="cal-dow">${DOW[parseISO(iso).getDay()]} · ${parseISO(iso).getDate()}</div>`).join('')}
+    ${days.map(iso=>{
+      const startHere = projects.filter(p=> calcDataSugeridaInicio(p.prazoLimite)===iso && !['Entregue','Arquivado'].includes(p.couple.ppStatus));
+      const deadlineHere = projects.filter(p=> p.prazoLimite===iso);
+      const isToday = iso===todayISO();
+      return `<div class="cal-cell ${isToday?'today':''}">
+        <div class="cal-daynum">&nbsp;</div>
+        ${startHere.map(p=>`<span class="chip" style="border-left-color:var(--blue);" title="Início sugerido">▶ ${escapeHtml(p.couple.name)}</span>`).join('')}
+        ${deadlineHere.map(p=>`<span class="chip" style="border-left-color:var(--red);" title="Prazo limite">⏰ ${escapeHtml(p.couple.name)}</span>`).join('')}
+      </div>`;
+    }).join('')}
+  </div>
+  <p class="kpi-sub" style="margin-top:10px;">▶ início sugerido de edição · ⏰ prazo limite de entrega</p>`;
+}
+function renderPPCronoMes(){
+  const year = ppCronoDate.getFullYear(), month = ppCronoDate.getMonth();
+  const first = new Date(year, month, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const daysInPrev = new Date(year, month, 0).getDate();
+  const cells = [];
+  for(let i=startDow-1;i>=0;i--) cells.push({d:daysInPrev-i, other:true, iso:null});
+  for(let d=1; d<=daysInMonth; d++){ cells.push({d, other:false, iso:`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`}); }
+  while(cells.length % 7 !== 0) cells.push({d:cells.length, other:true, iso:null});
+  const projects = ppFilteredProjects();
+  const today = todayISO();
+
+  return `
+  <div class="cal-head">
+    <div class="cal-nav">
+      <button onclick="ppCronoDate=new Date(${year},${month-1},1);renderApp()">‹</button>
+      <span class="serif" style="font-size:19px;">${MESES[month]} ${year}</span>
+      <button onclick="ppCronoDate=new Date(${year},${month+1},1);renderApp()">›</button>
+    </div>
+    <button class="btn secondary small" onclick="ppCronoDate=new Date();renderApp()">Hoje</button>
+  </div>
+  <div class="cal-grid">
+    ${DOW.map(d=>`<div class="cal-dow">${d}</div>`).join('')}
+    ${cells.map(c=>{
+      if(c.other) return `<div class="cal-cell other"><div class="cal-daynum">${c.d}</div></div>`;
+      const deadlineHere = projects.filter(p=>p.prazoLimite===c.iso);
+      const isToday = c.iso===today;
+      return `<div class="cal-cell ${isToday?'today':''}">
+        <div class="cal-daynum">${c.d}</div>
+        ${deadlineHere.slice(0,3).map(p=>`<span class="chip" style="border-left-color:var(--red);">⏰ ${escapeHtml(p.couple.name)}</span>`).join('')}
+        ${deadlineHere.length>3?`<div class="kpi-sub">+${deadlineHere.length-3}</div>`:''}
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
 /* ========================= ABA 3 · HDs / BACKUPS ========================= */
@@ -2110,6 +2468,14 @@ function forceReloadFromServer(){
   try{ localStorage.removeItem(LS_KEY); }catch(e){}
   location.reload(true);
 }
+function exportBackupJSON(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `roslen-backup-${todayISO()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
 function openSetupModal(){
   showModal('Como configurar', `
     <div class="notice ${supabaseConfigured?'':'warn'}">
@@ -2121,6 +2487,10 @@ function openSetupModal(){
     </div>
     <div class="notice ${AREA_PASSWORD?'':'warn'}">
       ${AREA_PASSWORD? '🔒 Área protegida ativa (Visão Geral, Agenda, Leads e Financeiro pedem senha).' : 'Área protegida desativada. Para ativar, defina a constante AREA_PASSWORD no topo do arquivo HTML.'}
+    </div>
+    <div style="margin-bottom:16px;">
+      <button class="btn secondary" onclick="exportBackupJSON()">⤓ Exportar backup completo (JSON)</button>
+      <p class="kpi-sub" style="margin-top:8px;">Baixa uma cópia de todos os dados da Central (SSDs, HDs, Agenda, Leads, Financeiro). Guarde de vez em quando — assim os dados nunca ficam presos só na plataforma.</p>
     </div>
     <p style="font-size:13.5px;">Passo a passo:</p>
     <ol style="font-size:13.5px; padding-left:18px;">

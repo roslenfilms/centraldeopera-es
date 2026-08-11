@@ -303,7 +303,7 @@ const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out"
 const DOW = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
 /* ---- Entregas (deliverables) com data + status ---- */
-const ENTREGA_TAGS = ["Teaser","Filme","PostCard","Melhores Cenas","Cerimônia na Íntegra","Pré-Wedding","Bride","VHS","Super8mm"];
+const ENTREGA_TAGS = ["Teaser","Filme","PostCard","Melhores Cenas","Cerimônia na Íntegra","Pré-Wedding","Bride","VHS","Super8mm","Galeria Digital","Material Bruto","Save the Date"];
 const DELIVERY_STATUSES = ["A fazer","Em edição","Em correção","Entregue"];
 const RETA_FINAL_TAGS = ["Filme","Melhores Cenas"]; // ficam vermelhas quando faltar <=30 dias e não entregue
 function mkEntrega(tag, status, dataPrevista){
@@ -405,6 +405,83 @@ function allProjects(){
     });
   });
   return list;
+}
+
+/* ---- Importação única da planilha de prazos contratuais (roda 1x, casando por nome) ---- */
+const CONTRACT_SCHEDULE = [
+  { name:"Samira & Denis", eventDate:"2026-08-01", prazoDias:120, prazoTipo:"corridos", entregas:[
+    {tag:"Teaser", data:"2026-08-21"}, {tag:"PostCard", data:"2026-08-21"}, {tag:"Filme", data:"2026-11-29"}, {tag:"Melhores Cenas", data:"2026-11-29"}
+  ]},
+  { name:"Beatriz & Samuel", eventDate:"2026-07-24", prazoDias:120, prazoTipo:"corridos", entregas:[
+    {tag:"Teaser", data:"2026-08-07"}, {tag:"Material Bruto", data:"2026-08-03"}, {tag:"Filme", data:"2026-11-21"}, {tag:"Melhores Cenas", data:"2026-11-21"}, {tag:"Cerimônia na Íntegra", data:"2026-11-21"}
+  ]},
+  { name:"Giulia & Lucas", eventDate:"2026-06-13", prazoDias:120, prazoTipo:"corridos", entregas:[
+    {tag:"Teaser", data:"2026-06-26"}, {tag:"Filme", data:"2026-10-11"}, {tag:"Melhores Cenas", data:"2026-10-11"}, {tag:"Cerimônia na Íntegra", data:"2026-10-11"}
+  ]},
+  { name:"Liê & Kally", eventDate:"2026-05-09", prazoDias:120, prazoTipo:"corridos", entregas:[
+    {tag:"Teaser", data:"2026-05-22"}, {tag:"Filme", data:"2026-09-06"}, {tag:"Melhores Cenas", data:"2026-09-06"}
+  ]},
+  { name:"Susana & Lucas", eventDate:"2026-04-20", prazoDias:120, prazoTipo:"corridos", entregas:[
+    {tag:"Teaser", data:"2026-05-04"}, {tag:"PostCard", data:"2026-05-04"}, {tag:"Filme", data:"2026-08-18"}, {tag:"Melhores Cenas", data:"2026-08-18"}, {tag:"Cerimônia na Íntegra", data:"2026-08-18"}
+  ]},
+  { name:"Agnes & Marcos", eventDate:"2026-07-04", prazoDias:120, prazoTipo:"corridos", entregas:[
+    {tag:"Teaser", data:"2026-07-17"}, {tag:"Filme", data:"2026-11-01"}
+  ]},
+  { name:"Gabriela & Felipe", eventDate:"2026-07-18", prazoDias:120, prazoTipo:"corridos", entregas:[
+    {tag:"Teaser", data:"2026-07-22"}, {tag:"Galeria Digital", data:"2026-07-31"}, {tag:"Bride", data:"2026-07-31"}, {tag:"Filme", data:"2026-11-15"}
+  ]},
+  { name:"Fernanda & Victor", eventDate:"2026-08-08", prazoDias:120, prazoTipo:"corridos", novo:true, entregas:[
+    {tag:"Teaser", data:"2026-08-28"}, {tag:"Filme", data:"2026-12-06"}
+  ]},
+  { name:"Carolina & César", eventDate:"2026-08-22", prazoDias:120, prazoTipo:"uteis", novo:true, obs:"Prazo do filme com data especial (assinalada com * na planilha original) — conferir condição específica.", entregas:[
+    {tag:"Teaser", data:"2026-09-18"}, {tag:"Filme", data:"2027-02-05"}
+  ]},
+  { name:"Patricia & Ryan", eventDate:"2026-08-29", prazoDias:120, prazoTipo:"corridos", novo:true, entregas:[
+    {tag:"Teaser", data:"2026-09-11"}, {tag:"Filme", data:"2026-12-27"}, {tag:"Melhores Cenas", data:"2026-12-27"}
+  ]},
+  { name:"Luana & Pedro", eventDate:"2026-12-05", prazoDias:120, prazoTipo:"corridos", novo:true, entregas:[
+    {tag:"Teaser", data:"2026-12-18"}, {tag:"Filme", data:"2027-04-04"}, {tag:"Melhores Cenas", data:"2027-04-04"}
+  ]},
+  { name:"Sâmea & Wender", eventDate:"", prazoDias:120, prazoTipo:"corridos", novo:true, obs:"Data do evento ainda a definir — prazos calculam automaticamente assim que a data for preenchida.", entregas:[
+    {tag:"Teaser", data:""}, {tag:"Filme", data:""}, {tag:"Save the Date", data:""}
+  ]}
+];
+function normName(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[+&]/g,"e").replace(/\s+/g,' ').trim(); }
+function importContractSchedule(){
+  if(state.meta && state.meta.contractScheduleImported) return;
+  const allCouples = [];
+  state.ssds.forEach(ssd=> ssd.couples.forEach(c=> allCouples.push({ssd,c})));
+  CONTRACT_SCHEDULE.forEach(entry=>{
+    const match = allCouples.find(x=> normName(x.c.name)===normName(entry.name));
+    const now = new Date().toISOString();
+    if(match){
+      const c = match.c;
+      if(!c.eventDate) c.eventDate = entry.eventDate;
+      if(!c.prazoDias){ c.prazoDias = entry.prazoDias; c.prazoTipo = entry.prazoTipo; }
+      c.entregas = c.entregas || [];
+      entry.entregas.forEach(e=>{
+        let existing = c.entregas.find(x=>x.tag===e.tag);
+        if(existing){ if(!existing.dataPrevista) existing.dataPrevista = e.data; }
+        else { c.entregas.push({ tag:e.tag, status:"A fazer", dataPrevista:e.data }); }
+      });
+      if(entry.obs && !c.obs) c.obs = entry.obs;
+      c.updatedAt = now;
+    } else {
+      // casal novo — ainda não existe em nenhum SSD; adiciona numa área de espera para revisão
+      const holding = state.ssds.find(s=>s.id==='ssd3') || state.ssds[0];
+      if(holding){
+        holding.couples.push({
+          id:uid(), name:entry.name, gb:0,
+          obs: (entry.obs? entry.obs+' — ' : '') + '⚠️ Confirmar em qual SSD estes arquivos estão fisicamente.',
+          eventDate: entry.eventDate, prazoDias: entry.prazoDias, prazoTipo: entry.prazoTipo,
+          entregas: entry.entregas.map(e=>({ tag:e.tag, status:"A fazer", dataPrevista:e.data })),
+          createdAt: now, updatedAt: now
+        });
+      }
+    }
+  });
+  state.meta = state.meta || {};
+  state.meta.contractScheduleImported = true;
 }
 
 /* ========================= ESTADO / SEED ========================= */
@@ -729,7 +806,7 @@ function startPolling(){
         state.meta = state.meta || {};
         state.meta.versao = remote.versao || 0;
         migrateHdSchema();
-        saveLocal();
+        importContractSchedule();
         renderApp();
         flashNotice("Dados atualizados por outro dispositivo");
       }
@@ -2516,7 +2593,8 @@ async function boot(){
   document.getElementById('gearBtn').addEventListener('click', openSetupModal);
   await initState();
   migrateHdSchema();
-  renderApp();
+  importContractSchedule();
+  persist();
 }
 boot();
 // re-attach dropzone listeners whenever the import tab renders

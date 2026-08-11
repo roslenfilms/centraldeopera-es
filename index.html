@@ -306,8 +306,9 @@ const DOW = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 const ENTREGA_TAGS = ["Teaser","Filme","PostCard","Melhores Cenas","Cerimônia na Íntegra","Pré-Wedding","Bride","VHS","Super8mm","Galeria Digital","Material Bruto","Save the Date"];
 const DELIVERY_STATUSES = ["A fazer","Em edição","Em correção","Entregue"];
 const RETA_FINAL_TAGS = ["Filme","Melhores Cenas"]; // ficam vermelhas quando faltar <=30 dias e não entregue
-function mkEntrega(tag, status, dataPrevista){
-  return { tag, status: status||"A fazer", dataPrevista: dataPrevista||"" };
+function mkEntrega(tag, status, dataPrevista, extra){
+  return Object.assign({ tag, status: status||"A fazer", dataPrevista: dataPrevista||"",
+    qtd:"", tipoPrazo:"nao_especificado", dataBase:"", editorEntrega:"", dataConclusao:"", obsEntrega:"" }, extra||{});
 }
 function diasAte(iso){ if(!iso) return null; const d=parseISO(iso); if(!d) return null; return Math.ceil((d.getTime()-Date.now())/86400000); }
 function entregaColor(entrega){
@@ -408,80 +409,95 @@ function allProjects(){
 }
 
 /* ---- Importação única da planilha de prazos contratuais (roda 1x, casando por nome) ---- */
-const CONTRACT_SCHEDULE = [
-  { name:"Samira & Denis", eventDate:"2026-08-01", prazoDias:120, prazoTipo:"corridos", entregas:[
-    {tag:"Teaser", data:"2026-08-21"}, {tag:"PostCard", data:"2026-08-21"}, {tag:"Filme", data:"2026-11-29"}, {tag:"Melhores Cenas", data:"2026-11-29"}
+const REMOVE_NAMES_V2 = ["Fernanda & Victor","Carolina & César","Patricia & Ryan","Luana & Pedro","Sâmea & Wender"];
+const CONTRACT_SCHEDULE_V2 = [
+  { name:"Susana & Lucas", eventDate:"2026-04-20", obs:"", entregas:[
+    {tag:"Teaser", qtd:10, tipo:"util", data:"2026-05-04"},
+    {tag:"PostCard", qtd:10, tipo:"util", data:"2026-05-04"},
+    {tag:"Filme", qtd:120, tipo:"nao_especificado", data:"2026-08-18"},
+    {tag:"Melhores Cenas", qtd:120, tipo:"nao_especificado", data:"2026-08-18"},
+    {tag:"Cerimônia na Íntegra", qtd:120, tipo:"nao_especificado", data:"2026-08-18"}
   ]},
-  { name:"Beatriz & Samuel", eventDate:"2026-07-24", prazoDias:120, prazoTipo:"corridos", entregas:[
-    {tag:"Teaser", data:"2026-08-07"}, {tag:"Material Bruto", data:"2026-08-03"}, {tag:"Filme", data:"2026-11-21"}, {tag:"Melhores Cenas", data:"2026-11-21"}, {tag:"Cerimônia na Íntegra", data:"2026-11-21"}
+  { name:"Liê & Kally", eventDate:"2026-05-09", obs:"", entregas:[
+    {tag:"Teaser", qtd:10, tipo:"util", data:"2026-05-22"},
+    {tag:"Filme", qtd:120, tipo:"corrido", data:"2026-09-06"},
+    {tag:"Melhores Cenas", qtd:120, tipo:"corrido", data:"2026-09-06"}
   ]},
-  { name:"Giulia & Lucas", eventDate:"2026-06-13", prazoDias:120, prazoTipo:"corridos", entregas:[
-    {tag:"Teaser", data:"2026-06-26"}, {tag:"Filme", data:"2026-10-11"}, {tag:"Melhores Cenas", data:"2026-10-11"}, {tag:"Cerimônia na Íntegra", data:"2026-10-11"}
+  { name:"Giulia & Lucas", eventDate:"2026-06-13", obs:"", entregas:[
+    {tag:"Teaser", qtd:10, tipo:"util", data:"2026-06-26"},
+    {tag:"Filme", qtd:120, tipo:"nao_especificado", data:"2026-10-11"},
+    {tag:"Melhores Cenas", qtd:120, tipo:"nao_especificado", data:"2026-10-11"},
+    {tag:"Cerimônia na Íntegra", qtd:120, tipo:"nao_especificado", data:"2026-10-11"}
   ]},
-  { name:"Liê & Kally", eventDate:"2026-05-09", prazoDias:120, prazoTipo:"corridos", entregas:[
-    {tag:"Teaser", data:"2026-05-22"}, {tag:"Filme", data:"2026-09-06"}, {tag:"Melhores Cenas", data:"2026-09-06"}
+  { name:"Agnes & Marcos", eventDate:"2026-07-04", obs:"", entregas:[
+    {tag:"Teaser", qtd:10, tipo:"util", data:"2026-07-17"},
+    {tag:"Filme", qtd:120, tipo:"corrido", data:"2026-11-01"}
   ]},
-  { name:"Susana & Lucas", eventDate:"2026-04-20", prazoDias:120, prazoTipo:"corridos", entregas:[
-    {tag:"Teaser", data:"2026-05-04"}, {tag:"PostCard", data:"2026-05-04"}, {tag:"Filme", data:"2026-08-18"}, {tag:"Melhores Cenas", data:"2026-08-18"}, {tag:"Cerimônia na Íntegra", data:"2026-08-18"}
+  { name:"Gabriela & Felipe", eventDate:"2026-07-18", obs:"Inclui cobertura de stories em tempo real (sem prazo pós-evento).", entregas:[
+    {tag:"Teaser", qtd:3, tipo:"util", data:"2026-07-22"},
+    {tag:"Galeria Digital", qtd:10, tipo:"util", data:"2026-07-31"},
+    {tag:"Bride", qtd:10, tipo:"util", data:"2026-07-31"},
+    {tag:"Filme", qtd:120, tipo:"nao_especificado", data:"2026-11-15"}
   ]},
-  { name:"Agnes & Marcos", eventDate:"2026-07-04", prazoDias:120, prazoTipo:"corridos", entregas:[
-    {tag:"Teaser", data:"2026-07-17"}, {tag:"Filme", data:"2026-11-01"}
+  { name:"Beatriz & Samuel", eventDate:"2026-07-24", obs:"", entregas:[
+    {tag:"Teaser", qtd:10, tipo:"util", data:"2026-08-07"},
+    {tag:"Material Bruto", qtd:10, tipo:"nao_especificado", data:"2026-08-03"},
+    {tag:"Filme", qtd:120, tipo:"nao_especificado", data:"2026-11-21"},
+    {tag:"Melhores Cenas", qtd:120, tipo:"nao_especificado", data:"2026-11-21"},
+    {tag:"Cerimônia na Íntegra", qtd:120, tipo:"nao_especificado", data:"2026-11-21"},
+    {tag:"Pré-Wedding", qtd:20, tipo:"util", data:"", usaGravacao:true}
   ]},
-  { name:"Gabriela & Felipe", eventDate:"2026-07-18", prazoDias:120, prazoTipo:"corridos", entregas:[
-    {tag:"Teaser", data:"2026-07-22"}, {tag:"Galeria Digital", data:"2026-07-31"}, {tag:"Bride", data:"2026-07-31"}, {tag:"Filme", data:"2026-11-15"}
-  ]},
-  { name:"Fernanda & Victor", eventDate:"2026-08-08", prazoDias:120, prazoTipo:"corridos", novo:true, entregas:[
-    {tag:"Teaser", data:"2026-08-28"}, {tag:"Filme", data:"2026-12-06"}
-  ]},
-  { name:"Carolina & César", eventDate:"2026-08-22", prazoDias:120, prazoTipo:"uteis", novo:true, obs:"Prazo do filme com data especial (assinalada com * na planilha original) — conferir condição específica.", entregas:[
-    {tag:"Teaser", data:"2026-09-18"}, {tag:"Filme", data:"2027-02-05"}
-  ]},
-  { name:"Patricia & Ryan", eventDate:"2026-08-29", prazoDias:120, prazoTipo:"corridos", novo:true, entregas:[
-    {tag:"Teaser", data:"2026-09-11"}, {tag:"Filme", data:"2026-12-27"}, {tag:"Melhores Cenas", data:"2026-12-27"}
-  ]},
-  { name:"Luana & Pedro", eventDate:"2026-12-05", prazoDias:120, prazoTipo:"corridos", novo:true, entregas:[
-    {tag:"Teaser", data:"2026-12-18"}, {tag:"Filme", data:"2027-04-04"}, {tag:"Melhores Cenas", data:"2027-04-04"}
-  ]},
-  { name:"Sâmea & Wender", eventDate:"", prazoDias:120, prazoTipo:"corridos", novo:true, obs:"Data do evento ainda a definir — prazos calculam automaticamente assim que a data for preenchida.", entregas:[
-    {tag:"Teaser", data:""}, {tag:"Filme", data:""}, {tag:"Save the Date", data:""}
+  { name:"Samira & Denis", eventDate:"2026-08-01", obs:"", entregas:[
+    {tag:"Pré-Wedding", qtd:20, tipo:"util", data:"", usaGravacao:true},
+    {tag:"Teaser", qtd:15, tipo:"util", data:"2026-08-21"},
+    {tag:"PostCard", qtd:15, tipo:"util", data:"2026-08-21"},
+    {tag:"Filme", qtd:120, tipo:"nao_especificado", data:"2026-11-29"},
+    {tag:"Melhores Cenas", qtd:120, tipo:"nao_especificado", data:"2026-11-29"}
   ]}
 ];
 function normName(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[+&]/g,"e").replace(/\s+/g,' ').trim(); }
-function importContractSchedule(){
-  if(state.meta && state.meta.contractScheduleImported) return;
+function importContractScheduleV2(){
+  if(state.meta && state.meta.contractScheduleV2Imported) return;
+  const now = new Date().toISOString();
+
+  // 1) remove os 5 casais que tinham sido adicionados por engano na importação anterior
+  state.ssds.forEach(ssd=>{
+    ssd.couples = ssd.couples.filter(c=>{
+      const isRemoveCandidate = REMOVE_NAMES_V2.some(n=>normName(n)===normName(c.name));
+      const hasMarker = (c.obs||'').includes('Confirmar em qual SSD');
+      return !(isRemoveCandidate && hasMarker);
+    });
+  });
+
+  // 2) atualiza os 7 casais que já existem, com o detalhe completo por entregável
   const allCouples = [];
   state.ssds.forEach(ssd=> ssd.couples.forEach(c=> allCouples.push({ssd,c})));
-  CONTRACT_SCHEDULE.forEach(entry=>{
+  CONTRACT_SCHEDULE_V2.forEach(entry=>{
     const match = allCouples.find(x=> normName(x.c.name)===normName(entry.name));
-    const now = new Date().toISOString();
-    if(match){
-      const c = match.c;
-      if(!c.eventDate) c.eventDate = entry.eventDate;
-      if(!c.prazoDias){ c.prazoDias = entry.prazoDias; c.prazoTipo = entry.prazoTipo; }
-      c.entregas = c.entregas || [];
-      entry.entregas.forEach(e=>{
-        let existing = c.entregas.find(x=>x.tag===e.tag);
-        if(existing){ if(!existing.dataPrevista) existing.dataPrevista = e.data; }
-        else { c.entregas.push({ tag:e.tag, status:"A fazer", dataPrevista:e.data }); }
-      });
-      if(entry.obs && !c.obs) c.obs = entry.obs;
-      c.updatedAt = now;
-    } else {
-      // casal novo — ainda não existe em nenhum SSD; adiciona numa área de espera para revisão
-      const holding = state.ssds.find(s=>s.id==='ssd3') || state.ssds[0];
-      if(holding){
-        holding.couples.push({
-          id:uid(), name:entry.name, gb:0,
-          obs: (entry.obs? entry.obs+' — ' : '') + '⚠️ Confirmar em qual SSD estes arquivos estão fisicamente.',
-          eventDate: entry.eventDate, prazoDias: entry.prazoDias, prazoTipo: entry.prazoTipo,
-          entregas: entry.entregas.map(e=>({ tag:e.tag, status:"A fazer", dataPrevista:e.data })),
-          createdAt: now, updatedAt: now
-        });
+    if(!match) return;
+    const c = match.c;
+    if(!c.eventDate) c.eventDate = entry.eventDate;
+    c.entregas = c.entregas || [];
+    entry.entregas.forEach(e=>{
+      let existing = c.entregas.find(x=>x.tag===e.tag);
+      const dataBase = e.usaGravacao ? "" : entry.eventDate;
+      const obsEntrega = e.usaGravacao ? "Prazo calculado a partir da data da gravação (ainda não informada)." : "";
+      if(existing){
+        if(!existing.dataPrevista) existing.dataPrevista = e.data;
+        if(!existing.qtd) existing.qtd = e.qtd;
+        if(!existing.tipoPrazo || existing.tipoPrazo==='nao_especificado') existing.tipoPrazo = e.tipo;
+        if(!existing.dataBase) existing.dataBase = dataBase;
+        if(!existing.obsEntrega) existing.obsEntrega = obsEntrega;
+      } else {
+        c.entregas.push(mkEntrega(e.tag, "A fazer", e.data, { qtd:e.qtd, tipoPrazo:e.tipo, dataBase, obsEntrega }));
       }
-    }
+    });
+    if(entry.obs && !c.obs) c.obs = entry.obs;
+    c.updatedAt = now;
   });
+
   state.meta = state.meta || {};
-  state.meta.contractScheduleImported = true;
+  state.meta.contractScheduleV2Imported = true;
 }
 
 /* ========================= ESTADO / SEED ========================= */
@@ -806,7 +822,7 @@ function startPolling(){
         state.meta = state.meta || {};
         state.meta.versao = remote.versao || 0;
         migrateHdSchema();
-        importContractSchedule();
+        importContractScheduleV2();
         renderApp();
         flashNotice("Dados atualizados por outro dispositivo");
       }
@@ -1174,28 +1190,39 @@ function openCoupleForm(ssdId, coupleId){
     <label class="field">Entregas — marque as que fazem parte do contrato</label>
     <div class="table-wrap">
       <table>
-        <thead><tr><th></th><th>Entrega</th><th>Status</th><th>Data prevista</th></tr></thead>
+        <thead><tr><th></th><th>Entrega</th><th>Status</th><th>Qtd. prazo</th><th>Tipo</th><th>Data-base</th><th>Data-limite</th></tr></thead>
         <tbody>
         ${ENTREGA_TAGS.map(t=>{
           const e = entregasByTag[t];
           const checked = !!e;
           const curStatus = e? e.status : "A fazer";
+          const rowCls = `f-erow-${cssId(t)}`;
           return `<tr>
-            <td><input type="checkbox" class="f-etag" data-tag="${t}" ${checked?'checked':''} onchange="document.getElementById('row-status-${cssId(t)}').style.display=this.checked?'':'none';document.getElementById('row-date-${cssId(t)}').style.display=this.checked?'':'none';"></td>
+            <td><input type="checkbox" class="f-etag" data-tag="${t}" ${checked?'checked':''} onchange="document.querySelectorAll('.${rowCls}').forEach(el=>el.style.display=this.checked?'':'none')"></td>
             <td>${t}</td>
-            <td id="row-status-${cssId(t)}" style="${checked?'':'display:none;'}">
+            <td class="${rowCls}" style="${checked?'':'display:none;'}">
               <div class="status-btns" data-tag="${t}">
                 ${STATUS_BUTTONS.map(sb=>`<button type="button" class="status-btn ${sb.cls} ${curStatus===sb.value?'selected':''}" data-status="${sb.value}" onclick="selectEstatus(this)">${sb.label}</button>`).join('')}
               </div>
             </td>
-            <td id="row-date-${cssId(t)}" style="${checked?'':'display:none;'}">
-              <input type="date" class="f-edata" data-tag="${t}" value="${e?e.dataPrevista:''}">
+            <td class="${rowCls}" style="${checked?'':'display:none;'}"><input type="number" class="f-eqtd mono" data-tag="${t}" style="width:60px;" value="${e?(e.qtd||''):''}"></td>
+            <td class="${rowCls}" style="${checked?'':'display:none;'}">
+              <select class="f-etipo" data-tag="${t}" style="width:120px;">
+                <option value="util" ${e&&e.tipoPrazo==='util'?'selected':''}>Dias úteis</option>
+                <option value="corrido" ${e&&e.tipoPrazo==='corrido'?'selected':''}>Dias corridos</option>
+                <option value="nao_especificado" ${!e||e.tipoPrazo==='nao_especificado'?'selected':''}>Não especificado</option>
+              </select>
+            </td>
+            <td class="${rowCls}" style="${checked?'':'display:none;'}"><input type="date" class="f-ebase" data-tag="${t}" style="width:135px;" value="${e?(e.dataBase||''):''}" title="Data a partir da qual o prazo é contado (evento, gravação, etc.)"></td>
+            <td class="${rowCls}" style="${checked?'':'display:none;'}">
+              <input type="date" class="f-edata" data-tag="${t}" style="width:135px;" value="${e?e.dataPrevista:''}">
             </td>
           </tr>`;
         }).join('')}
         </tbody>
       </table>
     </div>
+    <p class="kpi-sub" style="margin-top:6px;">Data-base = a partir de quando conta o prazo (data do evento, ou da gravação p/ pré-wedding). Data-limite = o resultado final, editável a qualquer momento.</p>
   `, ()=>{
     const name = document.getElementById('f-name').value.trim();
     const gb = Number(document.getElementById('f-gb').value)||0;
@@ -1215,7 +1242,11 @@ function openCoupleForm(ssdId, coupleId){
       const selBtn = document.querySelector(`.status-btns[data-tag="${cssEsc(tag)}"] .status-btn.selected`);
       const status = selBtn ? selBtn.dataset.status : "A fazer";
       const dataPrevista = document.querySelector(`.f-edata[data-tag="${cssEsc(tag)}"]`).value;
-      entregas.push({ tag, status, dataPrevista });
+      const qtd = document.querySelector(`.f-eqtd[data-tag="${cssEsc(tag)}"]`).value;
+      const tipoPrazo = document.querySelector(`.f-etipo[data-tag="${cssEsc(tag)}"]`).value;
+      const dataBase = document.querySelector(`.f-ebase[data-tag="${cssEsc(tag)}"]`).value;
+      const prev = entregasByTag[tag] || {};
+      entregas.push({ tag, status, dataPrevista, qtd, tipoPrazo, dataBase, editorEntrega:prev.editorEntrega||"", dataConclusao:prev.dataConclusao||"", obsEntrega:prev.obsEntrega||"" });
     });
     const now = new Date().toISOString();
     if(couple){
@@ -1245,6 +1276,7 @@ function deleteCouple(ssdId, coupleId){
 let ppSubTab = "visao";
 let ppEditorFilter = "Todos";
 let ppDashFilter = null;
+let ppPendBucket = null;
 let ppCronoView = "semana";
 let ppCronoDate = new Date();
 
@@ -1379,26 +1411,44 @@ function renderPPPendentes(){
       });
     });
   });
-  items.sort((a,b)=>(a.dias??9999)-(b.dias??9999));
+  const vencidas = items.filter(it=>it.dias!==null && it.dias<0).length;
+  const em7 = items.filter(it=>it.dias!==null && it.dias>=0 && it.dias<=7).length;
+  const em15 = items.filter(it=>it.dias!==null && it.dias>=0 && it.dias<=15).length;
+  const em30 = items.filter(it=>it.dias!==null && it.dias>=0 && it.dias<=30).length;
+
+  let filtered = items;
+  if(ppPendBucket==='vencidas') filtered = items.filter(it=>it.dias!==null && it.dias<0);
+  else if(ppPendBucket==='7') filtered = items.filter(it=>it.dias!==null && it.dias>=0 && it.dias<=7);
+  else if(ppPendBucket==='15') filtered = items.filter(it=>it.dias!==null && it.dias>=0 && it.dias<=15);
+  else if(ppPendBucket==='30') filtered = items.filter(it=>it.dias!==null && it.dias>=0 && it.dias<=30);
+  filtered.sort((a,b)=>(a.dias??9999)-(b.dias??9999));
+
   return `
+  <div class="grid grid-4" style="margin-bottom:16px;">
+    <div class="card clickable" onclick="ppPendBucket=ppPendBucket==='vencidas'?null:'vencidas';renderApp()" style="${ppPendBucket==='vencidas'?'border-color:var(--red);':''}"><div class="kpi-label">Vencidas</div><div class="kpi-value" style="color:var(--red);">${vencidas}</div></div>
+    <div class="card clickable" onclick="ppPendBucket=ppPendBucket==='7'?null:'7';renderApp()" style="${ppPendBucket==='7'?'border-color:var(--olive);':''}"><div class="kpi-label">Próximos 7 dias</div><div class="kpi-value">${em7}</div></div>
+    <div class="card clickable" onclick="ppPendBucket=ppPendBucket==='15'?null:'15';renderApp()" style="${ppPendBucket==='15'?'border-color:var(--olive);':''}"><div class="kpi-label">Próximos 15 dias</div><div class="kpi-value">${em15}</div></div>
+    <div class="card clickable" onclick="ppPendBucket=ppPendBucket==='30'?null:'30';renderApp()" style="${ppPendBucket==='30'?'border-color:var(--olive);':''}"><div class="kpi-label">Próximos 30 dias</div><div class="kpi-value">${em30}</div></div>
+  </div>
   <div class="pill-group" style="margin-bottom:16px;">
     <button class="pill ${ppEditorFilter==='Todos'?'active':''}" onclick="ppEditorFilter='Todos';renderApp()">Todos</button>
     ${EDITORES.map(e=>`<button class="pill ${ppEditorFilter===e?'active':''}" onclick="ppEditorFilter='${e}';renderApp()">${e}</button>`).join('')}
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Projeto</th><th>Entregável</th><th>Editor</th><th>Prazo</th><th>Dias restantes</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Projeto</th><th>Entregável</th><th>Editor</th><th>Data-base</th><th>Prazo</th><th>Dias restantes</th><th>Status</th><th></th></tr></thead>
       <tbody>
-      ${items.length? items.map(it=>`
-        <tr>
+      ${filtered.length? filtered.map(it=>`
+        <tr class="${it.dias!==null&&it.dias<0?'row-red':''}">
           <td>${escapeHtml(it.couple.name)}</td>
-          <td>${escapeHtml(it.entrega.tag)}</td>
+          <td>${escapeHtml(it.entrega.tag)}${it.entrega.qtd?`<div class="kpi-sub">${it.entrega.qtd} dias ${it.entrega.tipoPrazo==='util'?'úteis':it.entrega.tipoPrazo==='corrido'?'corridos':''}</div>`:''}</td>
           <td>${it.couple.editorPrincipal? escapeHtml(it.couple.editorPrincipal) : '<span class="kpi-sub">—</span>'}</td>
+          <td class="mono">${it.entrega.dataBase?fmtDateBR(it.entrega.dataBase):'—'}</td>
           <td class="mono">${it.entrega.dataPrevista?fmtDateBR(it.entrega.dataPrevista):'—'}</td>
           <td class="mono">${it.dias!==null? it.dias+'d' : '—'}</td>
-          <td><span class="dtag st-${entregaColor(it.entrega)}">${escapeHtml(it.entrega.status)}</span></td>
+          <td><span class="dtag st-${entregaColor(it.entrega)}">${escapeHtml(it.entrega.status)}</span>${it.entrega.obsEntrega?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(it.entrega.obsEntrega)}</div>`:''}</td>
           <td><button class="btn secondary small" onclick="openCoupleForm('${it.ssd.id}','${it.couple.id}')">Abrir</button></td>
-        </tr>`).join('') : `<tr><td colspan="7" style="text-align:center;color:#a5a38c;">Nenhuma entrega pendente.</td></tr>`}
+        </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;color:#a5a38c;">Nenhuma entrega pendente neste filtro.</td></tr>`}
       </tbody>
     </table>
   </div>`;
@@ -2593,7 +2643,7 @@ async function boot(){
   document.getElementById('gearBtn').addEventListener('click', openSetupModal);
   await initState();
   migrateHdSchema();
-  importContractSchedule();
+  importContractScheduleV2();
   persist();
 }
 boot();

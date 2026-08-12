@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Jost:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{
   --bg:#FBFAF5; --ink:#1B1A14; --olive:#6C6A3E; --olive-dark:#4B4A2A;
@@ -345,6 +346,13 @@ function migrateHdSchema(){
     });
   });
 }
+function migrateAgendaRoster(){
+  const sony = state.agendas.find(a=>a.id==='sony');
+  if(sony && sony.name!=='Sônia') sony.name = 'Sônia';
+  if(!state.agendas.find(a=>a.id==='mariana')){
+    state.agendas.push({ id:"mariana", name:"Mariana", color:"#8a6d9e" });
+  }
+}
 
 /* ---- Pós-Produção: editores, status, prazos ---- */
 const EDITORES = ["Sônia","Gabriel","Mariana","Lucas"];
@@ -679,7 +687,8 @@ function seedState(){
     agendas: [
       { id:"roslen", name:"Roslen", color:"#6C6A3E" },
       { id:"gabriel", name:"Gabriel", color:"#2C4370" },
-      { id:"sony", name:"Sony", color:"#A6672F" },
+      { id:"sony", name:"Sônia", color:"#A6672F" },
+      { id:"mariana", name:"Mariana", color:"#8a6d9e" },
       { id:"lucas", name:"Lucas", color:"#5E7A4A" }
     ],
     tasks: [
@@ -826,6 +835,7 @@ function startPolling(){
         state.meta = state.meta || {};
         state.meta.versao = remote.versao || 0;
         migrateHdSchema();
+        migrateAgendaRoster();
         importContractScheduleV2();
         renderApp();
         flashNotice("Dados atualizados por outro dispositivo");
@@ -1734,21 +1744,99 @@ let agendaView = "mes"; // mes | ano
 let agendaDate = new Date();
 let agendaFilterAgendas = new Set();
 let agendaFilterFrom = "", agendaFilterTo = "";
+let agendaOriginFilter = "Todos";
+
+/* ---- Google Calendar (opcional) ---- */
+const GOOGLE_CLIENT_ID = "103192580237-l3ft333a1696cbh6ri1135crei3ps5iq.apps.googleusercontent.com";
+const GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+let googleTokenClient = null;
+let googleAccessToken = "";
+let googleEvents = [];
+let googleConnected = false;
+
+function initGoogleAuth(){
+  if(!GOOGLE_CLIENT_ID || typeof google === 'undefined' || !google.accounts) return;
+  googleTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: GOOGLE_SCOPE,
+    callback: (resp)=>{
+      if(resp && resp.access_token){
+        googleAccessToken = resp.access_token;
+        googleConnected = true;
+        fetchGoogleEvents();
+      }
+    }
+  });
+}
+function connectGoogle(){
+  if(!GOOGLE_CLIENT_ID){ alert('O Client ID do Google ainda não foi configurado neste arquivo.'); return; }
+  if(!googleTokenClient) initGoogleAuth();
+  if(googleTokenClient) googleTokenClient.requestAccessToken();
+}
+function disconnectGoogle(){
+  googleAccessToken = ""; googleConnected = false; googleEvents = [];
+  renderApp();
+}
+async function fetchGoogleEvents(){
+  if(!googleAccessToken) return;
+  try{
+    const timeMin = new Date(); timeMin.setMonth(timeMin.getMonth()-1);
+    const timeMax = new Date(); timeMax.setMonth(timeMax.getMonth()+6);
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${timeMin.toISOString()}&timeMax=${timeMax.toISOString()}`;
+    const res = await fetch(url, { headers:{ Authorization:`Bearer ${googleAccessToken}` } });
+    if(res.status===401){ googleConnected=false; googleAccessToken=""; renderApp(); return; }
+    const data = await res.json();
+    googleEvents = (data.items||[]).map(ev=>({
+      id: ev.id,
+      date: (ev.start && (ev.start.date || (ev.start.dateTime||'').slice(0,10))) || '',
+      title: ev.summary || '(sem título)',
+      htmlLink: ev.htmlLink
+    })).filter(e=>e.date);
+    renderApp();
+  }catch(e){ console.warn('Falha ao buscar Google Agenda', e); }
+}
+
+/* ---- Fonte única: eventos vindos dos SSDs/Pós-Produção (entregas com data) ---- */
+function ssdDerivedEvents(){
+  const list = [];
+  state.ssds.forEach(ssd=>{
+    ssd.couples.forEach(c=>{
+      (c.entregas||[]).forEach(e=>{
+        if(e.dataPrevista){
+          list.push({
+            source:'ssd', date:e.dataPrevista, ssdId:ssd.id, coupleId:c.id,
+            couple:c.name, task:e.tag, editorName: e.editorEntrega||c.editorPrincipal||'',
+            status:e.status, color: entregaColor(e), atrasado: entregaAtrasada(e)
+          });
+        }
+      });
+    });
+  });
+  return list;
+}
+function agendaIdForEditorName(name){
+  const ag = state.agendas.find(a=>a.name===name);
+  return ag? ag.id : null;
+}
 
 function renderAgenda(){
   const extra = window.__navExtra;
   if(extra && extra.taskId){ window.__navExtra=null; setTimeout(()=>openTaskForm(extra.taskId),0); }
+  if(GOOGLE_CLIENT_ID && !googleTokenClient) setTimeout(initGoogleAuth, 0);
 
   const year = agendaDate.getFullYear();
   const month = agendaDate.getMonth();
 
   const body = agendaView==="mes" ? renderCalMonth(year,month) : renderCalYear(year);
-  const filteredTasks = agendaTasksInScope(year, month);
+  const filteredTasks = agendaEventsInScope(year, month);
 
   return `
   <div class="toolbar">
-    <div><h1 class="page-title">Agenda</h1><p class="page-sub">Planejamento por responsável.</p></div>
+    <div><h1 class="page-title">Agenda</h1><p class="page-sub">Calendário geral — Agenda manual + SSDs/Pós-Produção${GOOGLE_CLIENT_ID?' + Google Agenda':''}.</p></div>
     <div class="section-actions">
+      ${GOOGLE_CLIENT_ID? (googleConnected
+        ? `<button class="btn secondary" onclick="disconnectGoogle()">🔗 Google conectado — sair</button>`
+        : `<button class="btn secondary" onclick="connectGoogle()">🔗 Conectar Google Agenda</button>`) : ''}
       <button class="btn secondary" onclick="openAgendaForm()">+ Nova agenda</button>
       <button class="btn" onclick="openTaskForm(null, '${todayISO()}')">+ Nova tarefa</button>
     </div>
@@ -1759,8 +1847,15 @@ function renderAgenda(){
     <button class="pill ${agendaView==='ano'?'active':''}" onclick="agendaView='ano';renderApp()">Visão Ano</button>
   </div>
 
+  <div class="pill-group" style="margin-bottom:10px;">
+    <button class="pill ${agendaOriginFilter==='Todos'?'active':''}" onclick="agendaOriginFilter='Todos';renderApp()">Todas origens</button>
+    <button class="pill ${agendaOriginFilter==='agenda'?'active':''}" onclick="agendaOriginFilter='agenda';renderApp()">Agenda</button>
+    <button class="pill ${agendaOriginFilter==='ssd'?'active':''}" onclick="agendaOriginFilter='ssd';renderApp()">SSDs/Pós-Produção</button>
+    ${GOOGLE_CLIENT_ID? `<button class="pill ${agendaOriginFilter==='google'?'active':''}" onclick="agendaOriginFilter='google';renderApp()">Google Agenda</button>` : ''}
+  </div>
+
   <div class="pill-group" style="margin-bottom:16px;">
-    <button class="pill ${agendaFilterAgendas.size===0?'active':''}" onclick="agendaFilterAgendas=new Set();renderApp()">Todos</button>
+    <button class="pill ${agendaFilterAgendas.size===0?'active':''}" onclick="agendaFilterAgendas=new Set();renderApp()">Todos os responsáveis</button>
     ${state.agendas.map(a=>`<button class="pill ${agendaFilterAgendas.has(a.id)?'active':''}" style="${agendaFilterAgendas.has(a.id)?`background:${a.color};border-color:${a.color};`:''}" onclick="toggleAgendaFilter('${a.id}')">${escapeHtml(a.name)}</button>`).join('')}
   </div>
 
@@ -1779,31 +1874,55 @@ function renderAgenda(){
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Agenda</th><th>Casal/Projeto</th><th>Tarefa</th><th>Tipo</th><th>Data</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Origem</th><th>Responsável</th><th>Casal/Projeto</th><th>Item</th><th>Data</th><th>Status</th><th></th></tr></thead>
       <tbody>
-      ${filteredTasks.length? filteredTasks.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(t=>{
-        const ag = state.agendas.find(a=>a.id===t.agendaId) || {name:'—',color:'#999'};
-        const late = t.status!=='Entregue' && t.date < todayISO();
-        return `<tr>
-          <td><span class="badge" style="background:${ag.color}22;color:${ag.color};">${escapeHtml(ag.name)}</span></td>
-          <td>${escapeHtml(t.couple)}</td>
-          <td>${escapeHtml(t.task)} ${late?'<span class="flag">⚑</span>':''}</td>
-          <td>${escapeHtml(t.type)}</td>
-          <td class="mono">${fmtDateBR(t.date)}</td>
-          <td>
-            <select class="inline-select" onchange="updateTaskStatus('${t.id}', this.value)">
-              ${["A fazer","Em edição","Em correção","Entregue"].map(s=>`<option value="${s}" ${t.status===s?'selected':''}>${s}</option>`).join('')}
-            </select>
-          </td>
-          <td style="white-space:nowrap;">
-            <button class="btn secondary small" onclick="openTaskForm('${t.id}')">Editar</button>
-            <button class="btn danger small" onclick="deleteTask('${t.id}')">Excluir</button>
-          </td>
-        </tr>`;
-      }).join('') : `<tr><td colspan="7" style="text-align:center;color:#a5a38c;">Nenhuma tarefa neste recorte.</td></tr>`}
+      ${filteredTasks.length? filteredTasks.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(t=>renderAgendaRow(t)).join('') : `<tr><td colspan="7" style="text-align:center;color:#a5a38c;">Nenhum item neste recorte.</td></tr>`}
       </tbody>
     </table>
   </div>`;
+}
+function renderAgendaRow(t){
+  if(t.source==='ssd'){
+    const ag = agendaIdForEditorName(t.editorName);
+    const agObj = state.agendas.find(a=>a.id===ag);
+    return `<tr class="${t.atrasado?'row-red':''}">
+      <td><span class="badge grey">SSD/Pós-Produção</span></td>
+      <td>${agObj? `<span class="badge" style="background:${agObj.color}22;color:${agObj.color};">${escapeHtml(agObj.name)}</span>` : '<span class="kpi-sub">—</span>'}</td>
+      <td>${escapeHtml(t.couple)}</td>
+      <td>Entrega — ${escapeHtml(t.task)}</td>
+      <td class="mono">${fmtDateBR(t.date)}</td>
+      <td><span class="dtag st-${t.color}">${escapeHtml(t.status)}</span></td>
+      <td><button class="btn secondary small" onclick="openCoupleForm('${t.ssdId}','${t.coupleId}')">Abrir projeto</button></td>
+    </tr>`;
+  }
+  if(t.source==='google'){
+    return `<tr>
+      <td><span class="badge blue">Google Agenda</span></td>
+      <td><span class="kpi-sub">—</span></td>
+      <td colspan="2">${escapeHtml(t.title)}</td>
+      <td class="mono">${fmtDateBR(t.date)}</td>
+      <td><span class="kpi-sub">—</span></td>
+      <td>${t.htmlLink?`<a href="${t.htmlLink}" target="_blank" rel="noopener" class="btn secondary small">Abrir no Google</a>`:''}</td>
+    </tr>`;
+  }
+  const ag = state.agendas.find(a=>a.id===t.agendaId) || {name:'—',color:'#999'};
+  const late = t.status!=='Entregue' && t.date < todayISO();
+  return `<tr class="${late?'row-red':''}">
+    <td><span class="badge grey">Agenda</span></td>
+    <td><span class="badge" style="background:${ag.color}22;color:${ag.color};">${escapeHtml(ag.name)}</span></td>
+    <td>${escapeHtml(t.couple)}</td>
+    <td>${escapeHtml(t.task)} ${late?'<span class="flag">⚑</span>':''}</td>
+    <td class="mono">${fmtDateBR(t.date)}</td>
+    <td>
+      <select class="inline-select" onchange="updateTaskStatus('${t.id}', this.value)">
+        ${["A fazer","Em edição","Em correção","Entregue"].map(s=>`<option value="${s}" ${t.status===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </td>
+    <td style="white-space:nowrap;">
+      <button class="btn secondary small" onclick="openTaskForm('${t.id}')">Editar</button>
+      <button class="btn danger small" onclick="deleteTask('${t.id}')">Excluir</button>
+    </td>
+  </tr>`;
 }
 function toggleAgendaFilter(id){
   if(agendaFilterAgendas.has(id)) agendaFilterAgendas.delete(id); else agendaFilterAgendas.add(id);
@@ -1813,8 +1932,25 @@ function taskMatchesFilter(t){
   if(agendaFilterAgendas.size && !agendaFilterAgendas.has(t.agendaId)) return false;
   return true;
 }
-function agendaTasksInScope(year, month){
-  let list = state.tasks.filter(taskMatchesFilter);
+function allAgendaEvents(){
+  let list = [];
+  if(agendaOriginFilter==='Todos' || agendaOriginFilter==='agenda'){
+    list = list.concat(state.tasks.filter(taskMatchesFilter).map(t=>({...t, source:'agenda'})));
+  }
+  if(agendaOriginFilter==='Todos' || agendaOriginFilter==='ssd'){
+    let ssdEv = ssdDerivedEvents();
+    if(agendaFilterAgendas.size){
+      ssdEv = ssdEv.filter(e=>{ const id = agendaIdForEditorName(e.editorName); return id && agendaFilterAgendas.has(id); });
+    }
+    list = list.concat(ssdEv);
+  }
+  if(GOOGLE_CLIENT_ID && (agendaOriginFilter==='Todos' || agendaOriginFilter==='google') && !agendaFilterAgendas.size){
+    list = list.concat(googleEvents.map(e=>({...e, source:'google'})));
+  }
+  return list;
+}
+function agendaEventsInScope(year, month){
+  let list = allAgendaEvents();
   if(agendaFilterFrom || agendaFilterTo){
     return list.filter(t => (!agendaFilterFrom || t.date>=agendaFilterFrom) && (!agendaFilterTo || t.date<=agendaFilterTo));
   }
@@ -1837,6 +1973,7 @@ function renderCalMonth(year, month){
   }
   while(cells.length % 7 !== 0) cells.push({d:cells.length, other:true, iso:null});
   const today = todayISO();
+  const events = allAgendaEvents();
 
   return `
   <div class="cal-head">
@@ -1851,22 +1988,30 @@ function renderCalMonth(year, month){
     ${DOW.map(d=>`<div class="cal-dow">${d}</div>`).join('')}
     ${cells.map(c=>{
       if(c.other) return `<div class="cal-cell other"><div class="cal-daynum">${c.d}</div></div>`;
-      const dayTasks = state.tasks.filter(taskMatchesFilter).filter(t=>t.date===c.iso);
+      const dayEvents = events.filter(t=>t.date===c.iso);
       const isToday = c.iso===today;
       return `<div class="cal-cell ${isToday?'today':''}" onclick="openTaskForm(null,'${c.iso}')">
         <div class="cal-daynum">${c.d}</div>
-        ${dayTasks.slice(0,4).map(t=>{
-          const ag = state.agendas.find(a=>a.id===t.agendaId)||{color:'#999'};
-          const late = t.status!=='Entregue' && t.date < today;
-          const done = t.status==='Entregue';
-          return `<span class="chip ${done?'done':''}" style="border-left-color:${ag.color};" onclick="event.stopPropagation();openTaskForm('${t.id}')">${late?'⚑ ':''}${escapeHtml(t.couple)}</span>`;
-        }).join('')}
-        ${dayTasks.length>4?`<div class="kpi-sub">+${dayTasks.length-4}</div>`:''}
+        ${dayEvents.slice(0,4).map(t=>renderCalChip(t)).join('')}
+        ${dayEvents.length>4?`<div class="kpi-sub">+${dayEvents.length-4}</div>`:''}
       </div>`;
     }).join('')}
   </div>`;
 }
+function renderCalChip(t){
+  if(t.source==='ssd'){
+    return `<span class="chip" style="border-left-color:${t.atrasado?'var(--red)':'var(--blue)'};" onclick="event.stopPropagation();openCoupleForm('${t.ssdId}','${t.coupleId}')" title="${escapeHtml(t.editorName||'')}">${escapeHtml(t.couple)} — ${escapeHtml(t.task)}</span>`;
+  }
+  if(t.source==='google'){
+    return `<span class="chip" style="border-left-color:#888;" onclick="event.stopPropagation();${t.htmlLink?`window.open('${t.htmlLink}','_blank')`:''}">📅 ${escapeHtml(t.title)}</span>`;
+  }
+  const ag = state.agendas.find(a=>a.id===t.agendaId)||{color:'#999'};
+  const late = t.status!=='Entregue' && t.date < todayISO();
+  const done = t.status==='Entregue';
+  return `<span class="chip ${done?'done':''}" style="border-left-color:${ag.color};" onclick="event.stopPropagation();openTaskForm('${t.id}')">${late?'⚑ ':''}${escapeHtml(t.couple)}</span>`;
+}
 function renderCalYear(year){
+  const events = allAgendaEvents();
   return `
   <div class="cal-head">
     <div class="cal-nav">
@@ -1878,12 +2023,15 @@ function renderCalYear(year){
   <div class="year-grid">
     ${MESES.map((m,i)=>{
       const mk = `${year}-${String(i+1).padStart(2,'0')}`;
-      const monthTasks = state.tasks.filter(taskMatchesFilter).filter(t=>t.date.startsWith(mk));
+      const monthEvents = events.filter(t=>t.date.startsWith(mk));
       const byAgenda = {};
-      monthTasks.forEach(t=>{ byAgenda[t.agendaId]=(byAgenda[t.agendaId]||0)+1; });
+      monthEvents.forEach(t=>{
+        const id = t.source==='ssd' ? agendaIdForEditorName(t.editorName) : (t.source==='agenda'? t.agendaId : null);
+        if(id) byAgenda[id]=(byAgenda[id]||0)+1;
+      });
       return `<div class="month-card" onclick="agendaDate=new Date(${year},${i},1);agendaView='mes';renderApp()">
         <h4>${m}</h4>
-        <div class="kpi-sub">${monthTasks.length} tarefa${monthTasks.length!==1?'s':''}</div>
+        <div class="kpi-sub">${monthEvents.length} item${monthEvents.length!==1?'s':''}</div>
         ${Object.entries(byAgenda).map(([id,n])=>{
           const ag = state.agendas.find(a=>a.id===id)||{name:id,color:'#999'};
           return `<div class="dotcount"><span class="sw" style="background:${ag.color}"></span>${escapeHtml(ag.name)} · ${n}</div>`;
@@ -1915,7 +2063,7 @@ function openTaskForm(taskId, presetDate){
       <div class="full"><label class="field">Casal / Projeto</label><input type="text" id="f-couple" value="${t?escapeHtml(t.couple):''}"></div>
       <div class="full"><label class="field">Tarefa</label><input type="text" id="f-task" value="${t?escapeHtml(t.task):''}"></div>
       <div><label class="field">Tipo</label>
-        <select id="f-type">${["Edição","Correção","Entrega","Gravação","Reunião"].map(ty=>`<option value="${ty}" ${t&&t.type===ty?'selected':''}>${ty}</option>`).join('')}</select>
+        <select id="f-type">${["Decupagem","Edição","Correção","Entrega","Gravação","Reunião"].map(ty=>`<option value="${ty}" ${t&&t.type===ty?'selected':''}>${ty}</option>`).join('')}</select>
       </div>
       <div><label class="field">Data</label><input type="date" id="f-date" value="${t?t.date:(presetDate||todayISO())}"></div>
       <div class="full"><label class="field">Status</label>
@@ -2684,6 +2832,7 @@ async function boot(){
   document.getElementById('gearBtn').addEventListener('click', openSetupModal);
   await initState();
   migrateHdSchema();
+        migrateAgendaRoster();
   importContractScheduleV2();
   persist();
 }

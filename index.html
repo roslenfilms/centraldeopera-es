@@ -96,6 +96,7 @@ main{max-width:1400px; margin:0 auto; padding:24px; padding-bottom:80px;}
 .dtag{display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 9px; border-radius:6px; margin:2px 4px 4px 0; border:1px solid var(--line); background:#fff;}
 .dtag .dt-date{font-family:'IBM Plex Mono',monospace; opacity:.75;}
 .dtag.st-branco{background:#fff; color:#7a7860; border-color:var(--line);}
+.dtag.st-azul{background:rgba(44,67,112,.13); color:var(--blue); border-color:rgba(44,67,112,.3);}
 .dtag.st-amarelo{background:#FCEFD6; color:#8a6a1f; border-color:#EBD9AA;}
 .dtag.st-rosa{background:#F7E2E2; color:#9a4f4f; border-color:#EFC9C9;}
 .dtag.st-verde{background:rgba(94,122,74,.14); color:var(--green); border-color:rgba(94,122,74,.3);}
@@ -109,6 +110,7 @@ main{max-width:1400px; margin:0 auto; padding:24px; padding-bottom:80px;}
 .status-btn:hover{opacity:.85;}
 .status-btn.selected{opacity:1; font-weight:600; box-shadow:0 0 0 2px rgba(27,26,20,.12);}
 .status-btn.stb-branco{background:#fff; color:#7a7860; border-color:var(--line);}
+.status-btn.stb-azul{background:rgba(44,67,112,.16); color:var(--blue); border-color:rgba(44,67,112,.35);}
 .status-btn.stb-amarelo{background:#FCEFD6; color:#8a6a1f; border-color:#EBD9AA;}
 .status-btn.stb-rosa{background:#F7E2E2; color:#9a4f4f; border-color:#EFC9C9;}
 .status-btn.stb-verde{background:rgba(94,122,74,.16); color:var(--green); border-color:rgba(94,122,74,.35);}
@@ -304,19 +306,21 @@ const DOW = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
 /* ---- Entregas (deliverables) com data + status ---- */
 const ENTREGA_TAGS = ["Teaser","Filme","PostCard","Melhores Cenas","Cerimônia na Íntegra","Pré-Wedding","Bride","VHS","Super8mm","Galeria Digital","Material Bruto","Save the Date"];
-const DELIVERY_STATUSES = ["A fazer","Em edição","Em correção","Entregue"];
-const RETA_FINAL_TAGS = ["Filme","Melhores Cenas"]; // ficam vermelhas quando faltar <=30 dias e não entregue
+const DELIVERY_STATUSES = ["A fazer","Decupagem","Em edição","Em correção","Entregue"];
 function mkEntrega(tag, status, dataPrevista, extra){
   return Object.assign({ tag, status: status||"A fazer", dataPrevista: dataPrevista||"",
     qtd:"", tipoPrazo:"nao_especificado", dataBase:"", editorEntrega:"", dataConclusao:"", obsEntrega:"" }, extra||{});
 }
 function diasAte(iso){ if(!iso) return null; const d=parseISO(iso); if(!d) return null; return Math.ceil((d.getTime()-Date.now())/86400000); }
+function entregaAtrasada(entrega){
+  if(entrega.status==="Entregue") return false;
+  if(!entrega.dataPrevista) return false;
+  return entrega.dataPrevista < todayISO();
+}
 function entregaColor(entrega){
   if(entrega.status==="Entregue") return "verde";
-  if(RETA_FINAL_TAGS.includes(entrega.tag) && entrega.dataPrevista){
-    const dias = diasAte(entrega.dataPrevista);
-    if(dias!==null && dias<=30) return "vermelho";
-  }
+  if(entregaAtrasada(entrega)) return "vermelho";
+  if(entrega.status==="Decupagem") return "azul";
   if(entrega.status==="Em edição") return "amarelo";
   if(entrega.status==="Em correção") return "rosa";
   return "branco";
@@ -1057,11 +1061,12 @@ function renderSSDs(){
     </div>
   </div>
   <div class="status-legend">
-    <span><span class="sw" style="background:#fff;"></span>Parado</span>
-    <span><span class="sw" style="background:#FCEFD6;"></span>Sendo editado</span>
+    <span><span class="sw" style="background:#fff;"></span>Aguardando</span>
+    <span><span class="sw" style="background:rgba(44,67,112,.2);"></span>Decupagem</span>
+    <span><span class="sw" style="background:#FCEFD6;"></span>Em edição</span>
     <span><span class="sw" style="background:#F7E2E2;"></span>Em correção</span>
     <span><span class="sw" style="background:rgba(94,122,74,.3);"></span>Entregue</span>
-    <span><span class="sw" style="background:rgba(150,66,46,.3);"></span>Reta final (≤30 dias · Filme/Melhores Cenas)</span>
+    <span><span class="sw" style="background:rgba(150,66,46,.3);"></span>Atrasado (prazo vencido, automático)</span>
   </div>
   <div class="grid grid-2">
     ${state.ssds.map(renderSSDCard).join('')}
@@ -1101,7 +1106,7 @@ function renderSSDCard(ssd){
             <td>${prazoLimite? `<div class="mono" style="font-size:12px;">${fmtDateBR(prazoLimite)}</div>${ind?`<span class="badge ${ind.cls}" style="margin-top:3px;display:inline-block;">${ind.label}</span>`:''}` : '<span class="kpi-sub">—</span>'}</td>
             <td>${(c.entregas&&c.entregas.length)? c.entregas.map(e=>{
               const col = entregaColor(e);
-              return `<span class="dtag st-${col}">${escapeHtml(e.tag)}${e.dataPrevista?`<span class="dt-date">${fmtDateBR(e.dataPrevista)}</span>`:''}</span>`;
+              return `<span class="dtag st-${col}">${escapeHtml(e.tag)}${e.editorEntrega?` <b title="${escapeHtml(e.editorEntrega)}" style="font-weight:700;">${editorInitials(e.editorEntrega)}</b>`:''}${e.dataPrevista?`<span class="dt-date">${fmtDateBR(e.dataPrevista)}</span>`:''}</span>`;
             }).join('') : '<span class="kpi-sub">—</span>'}</td>
             <td style="white-space:nowrap;">
               <button class="btn secondary small" onclick="openCoupleForm('${ssd.id}','${c.id}')">Editar</button>
@@ -1144,6 +1149,7 @@ function openCoupleForm(ssdId, coupleId){
   (couple? couple.entregas||[] : []).forEach(e=> entregasByTag[e.tag]=e);
   const STATUS_BUTTONS = [
     { value:"A fazer", label:"Parado", cls:"stb-branco" },
+    { value:"Decupagem", label:"Decupagem", cls:"stb-azul" },
     { value:"Em edição", label:"Em edição", cls:"stb-amarelo" },
     { value:"Em correção", label:"Correção", cls:"stb-rosa" },
     { value:"Entregue", label:"Finalizado", cls:"stb-verde" }
@@ -1165,11 +1171,6 @@ function openCoupleForm(ssdId, coupleId){
           ${EDITORES.map(e=>`<option value="${e}" ${couple&&couple.editorSecundario===e?'selected':''}>${e}</option>`).join('')}
         </select>
       </div>
-      <div class="full"><label class="field">Status de pós-produção</label>
-        <select id="f-ppstatus">
-          ${PP_STATUSES.map(s=>`<option value="${s}" ${couple&&couple.ppStatus===s?'selected':(!couple&&s==='Evento futuro'?'selected':'')}>${s}</option>`).join('')}
-        </select>
-      </div>
       <div><label class="field">Prazo contratual (nº)</label><input type="number" id="f-prazodias" class="mono" value="${couple?(couple.prazoDias||''):''}"></div>
       <div><label class="field">Tipo de prazo</label>
         <select id="f-prazotipo">
@@ -1188,9 +1189,10 @@ function openCoupleForm(ssdId, coupleId){
     <label class="field">Observação (opcional)</label>
     <input type="text" id="f-obs" value="${couple?escapeHtml(couple.obs||''):''}">
     <label class="field">Entregas — marque as que fazem parte do contrato</label>
+    <p class="kpi-sub" style="margin-top:-4px;margin-bottom:8px;">O status e o responsável de cada entregável aqui são a fonte única — a Pós-Produção só exibe isso, não tem cadastro separado.</p>
     <div class="table-wrap">
       <table>
-        <thead><tr><th></th><th>Entrega</th><th>Status</th><th>Qtd. prazo</th><th>Tipo</th><th>Data-base</th><th>Data-limite</th></tr></thead>
+        <thead><tr><th></th><th>Entrega</th><th>Status</th><th>Responsável</th><th>Qtd. prazo</th><th>Tipo</th><th>Data-base</th><th>Data-limite</th></tr></thead>
         <tbody>
         ${ENTREGA_TAGS.map(t=>{
           const e = entregasByTag[t];
@@ -1204,6 +1206,12 @@ function openCoupleForm(ssdId, coupleId){
               <div class="status-btns" data-tag="${t}">
                 ${STATUS_BUTTONS.map(sb=>`<button type="button" class="status-btn ${sb.cls} ${curStatus===sb.value?'selected':''}" data-status="${sb.value}" onclick="selectEstatus(this)">${sb.label}</button>`).join('')}
               </div>
+            </td>
+            <td class="${rowCls}" style="${checked?'':'display:none;'}">
+              <select class="f-eeditor" data-tag="${t}" style="width:110px;">
+                <option value="">Não definido</option>
+                ${EDITORES.map(ed=>`<option value="${ed}" ${e&&e.editorEntrega===ed?'selected':''}>${ed}</option>`).join('')}
+              </select>
             </td>
             <td class="${rowCls}" style="${checked?'':'display:none;'}"><input type="number" class="f-eqtd mono" data-tag="${t}" style="width:60px;" value="${e?(e.qtd||''):''}"></td>
             <td class="${rowCls}" style="${checked?'':'display:none;'}">
@@ -1230,7 +1238,6 @@ function openCoupleForm(ssdId, coupleId){
     const eventDate = document.getElementById('f-eventdate').value;
     const editorPrincipal = document.getElementById('f-editor1').value;
     const editorSecundario = document.getElementById('f-editor2').value;
-    const ppStatus = document.getElementById('f-ppstatus').value;
     const prazoDias = Number(document.getElementById('f-prazodias').value)||0;
     const prazoTipo = document.getElementById('f-prazotipo').value;
     const contratoAnexado = document.getElementById('f-contrato').value === 'sim';
@@ -1245,15 +1252,19 @@ function openCoupleForm(ssdId, coupleId){
       const qtd = document.querySelector(`.f-eqtd[data-tag="${cssEsc(tag)}"]`).value;
       const tipoPrazo = document.querySelector(`.f-etipo[data-tag="${cssEsc(tag)}"]`).value;
       const dataBase = document.querySelector(`.f-ebase[data-tag="${cssEsc(tag)}"]`).value;
+      const editorEntrega = document.querySelector(`.f-eeditor[data-tag="${cssEsc(tag)}"]`).value;
       const prev = entregasByTag[tag] || {};
-      entregas.push({ tag, status, dataPrevista, qtd, tipoPrazo, dataBase, editorEntrega:prev.editorEntrega||"", dataConclusao:prev.dataConclusao||"", obsEntrega:prev.obsEntrega||"" });
+      let dataConclusao = prev.dataConclusao || "";
+      if(status==="Entregue" && !dataConclusao) dataConclusao = todayISO();
+      if(status!=="Entregue") dataConclusao = "";
+      entregas.push({ tag, status, dataPrevista, qtd, tipoPrazo, dataBase, editorEntrega, dataConclusao, obsEntrega:prev.obsEntrega||"" });
     });
     const now = new Date().toISOString();
     if(couple){
-      Object.assign(couple, {name,gb,obs,entregas,eventDate,editorPrincipal,editorSecundario,ppStatus,prazoDias,prazoTipo,contratoAnexado,contratoLocal,updatedAt:now});
+      Object.assign(couple, {name,gb,obs,entregas,eventDate,editorPrincipal,editorSecundario,prazoDias,prazoTipo,contratoAnexado,contratoLocal,updatedAt:now});
       delete couple.tags;
     } else {
-      ssd.couples.push({ id:uid(), name, gb, obs, entregas, eventDate, editorPrincipal, editorSecundario, ppStatus, prazoDias, prazoTipo, contratoAnexado, contratoLocal, createdAt:now, updatedAt:now });
+      ssd.couples.push({ id:uid(), name, gb, obs, entregas, eventDate, editorPrincipal, editorSecundario, prazoDias, prazoTipo, contratoAnexado, contratoLocal, createdAt:now, updatedAt:now });
     }
     closeModal(); persist();
   }, null, true);
@@ -1273,6 +1284,8 @@ function deleteCouple(ssdId, coupleId){
 }
 
 /* ========================= ABA · PÓS-PRODUÇÃO ========================= */
+/* Tudo aqui lê diretamente de state.ssds[].couples[].entregas[] — não existe
+   nenhum cadastro paralelo. Cada "item" é um entregável real de um casal num SSD. */
 let ppSubTab = "visao";
 let ppEditorFilter = "Todos";
 let ppDashFilter = null;
@@ -1283,7 +1296,7 @@ let ppCronoDate = new Date();
 function renderPP(){
   return `
   <div class="toolbar">
-    <div><h1 class="page-title">Pós-Produção</h1><p class="page-sub">Fluxo de edição, prazos e equipe.</p></div>
+    <div><h1 class="page-title">Pós-Produção</h1><p class="page-sub">Mesmos dados dos SSDs — organizados por entregável, editor e prazo.</p></div>
   </div>
   <div class="pill-group" style="margin-bottom:20px;">
     ${[["visao","Visão Geral"],["equipe","Equipe"],["correcoes","Correções"],["pendentes","Entregas Pendentes"],["cronograma","Cronograma"]]
@@ -1293,34 +1306,55 @@ function renderPP(){
   `;
 }
 
-function ppFilteredProjects(){
-  let list = allProjects();
-  if(ppEditorFilter!=='Todos'){
-    list = list.filter(p=> p.couple.editorPrincipal===ppEditorFilter || p.couple.editorSecundario===ppEditorFilter);
-  }
+/* ---- Fonte única: lista achatada de entregáveis (1 linha por entrega, não por projeto) ---- */
+function allEntregaveis(){
+  const list = [];
+  state.ssds.forEach(ssd=>{
+    ssd.couples.forEach(c=>{
+      (c.entregas||[]).forEach(e=>{
+        const editor = e.editorEntrega || c.editorPrincipal || "";
+        list.push({
+          ssd, couple:c, entrega:e, editor,
+          dias: e.dataPrevista? diasAte(e.dataPrevista) : null,
+          atrasado: entregaAtrasada(e),
+          color: entregaColor(e)
+        });
+      });
+    });
+  });
+  return list;
+}
+function ppFiltered(){
+  let list = allEntregaveis();
+  if(ppEditorFilter!=='Todos') list = list.filter(it=> it.editor===ppEditorFilter);
   return list;
 }
 
 function renderPPVisaoGeral(){
-  const projects = ppFilteredProjects();
-  const groupCount = g => projects.filter(p=> PP_STATUS_GROUP[p.couple.ppStatus||'Evento futuro']===g).length;
-  const atrasados = projects.filter(p=> p.diasRestantes!==null && p.diasRestantes<0 && !['Entregue','Arquivado'].includes(p.couple.ppStatus)).length;
+  const items = ppFiltered();
+  const aguardando = items.filter(it=>it.entrega.status==='A fazer' && !it.atrasado);
+  const decupagem = items.filter(it=>it.entrega.status==='Decupagem' && !it.atrasado);
+  const emEdicao = items.filter(it=>it.entrega.status==='Em edição' && !it.atrasado);
+  const correcao = items.filter(it=>it.entrega.status==='Em correção' && !it.atrasado);
+  const pendentes = items.filter(it=>it.entrega.status!=='Entregue' && it.entrega.dataPrevista);
+  const atrasados = items.filter(it=>it.atrasado);
   const monthKey = todayISO().slice(0,7);
-  const entreguesNoMes = projects.filter(p=> p.couple.ppStatus==='Entregue' && p.couple.updatedAt && p.couple.updatedAt.slice(0,7)===monthKey).length;
+  const entreguesNoMes = items.filter(it=> it.entrega.status==='Entregue' && it.entrega.dataConclusao && it.entrega.dataConclusao.slice(0,7)===monthKey);
 
   const cards = [
-    { key:'edicao', label:'Em edição', value:groupCount('edicao') },
-    { key:'aguardando', label:'Aguardando edição', value:groupCount('aguardando') },
-    { key:'correcao', label:'Correções', value:groupCount('correcao') },
-    { key:'pendente', label:'Entregas pendentes', value:groupCount('pendente') },
-    { key:'atrasado', label:'Atrasados', value:atrasados },
-    { key:'entregue_mes', label:'Entregues no mês', value:entreguesNoMes }
+    { key:'edicao', label:'Em edição', value:emEdicao.length, list:emEdicao },
+    { key:'decupagem', label:'Decupagem', value:decupagem.length, list:decupagem },
+    { key:'aguardando', label:'Aguardando edição', value:aguardando.length, list:aguardando },
+    { key:'correcao', label:'Correções', value:correcao.length, list:correcao },
+    { key:'atrasado', label:'Atrasados', value:atrasados.length, list:atrasados },
+    { key:'entregue_mes', label:'Entregues no mês', value:entreguesNoMes.length, list:entreguesNoMes }
   ];
+  const dashMap = {}; cards.forEach(c=>dashMap[c.key]=c.list); dashMap['pendente'] = pendentes;
 
-  let list = projects;
-  if(ppDashFilter==='atrasado') list = projects.filter(p=> p.diasRestantes!==null && p.diasRestantes<0 && !['Entregue','Arquivado'].includes(p.couple.ppStatus));
-  else if(ppDashFilter==='entregue_mes') list = projects.filter(p=> p.couple.ppStatus==='Entregue' && p.couple.updatedAt && p.couple.updatedAt.slice(0,7)===monthKey);
-  else if(ppDashFilter) list = projects.filter(p=> PP_STATUS_GROUP[p.couple.ppStatus||'Evento futuro']===ppDashFilter);
+  let list = items.filter(it=>it.entrega.status!=='Entregue'); // padrão: esconde entregues
+  if(ppDashFilter) list = dashMap[ppDashFilter] || list;
+
+  const emProducaoAgora = items.filter(it=> (it.entrega.status==='Decupagem' || it.entrega.status==='Em edição') && it.editor);
 
   return `
   <div class="pill-group" style="margin-bottom:16px;">
@@ -1334,83 +1368,89 @@ function renderPPVisaoGeral(){
         <div class="kpi-value">${c.value}</div>
       </div>`).join('')}
   </div>
-  ${renderPPProjectTable(list)}
+  ${emProducaoAgora.length? `
+  <div class="card" style="margin-bottom:22px;">
+    <div class="panel-title">Em produção agora</div>
+    ${emProducaoAgora.map(it=>`
+      <div class="list-row" onclick="openCoupleForm('${it.ssd.id}','${it.couple.id}')">
+        <span><span class="badge blue">${editorInitials(it.editor)}</span> ${escapeHtml(it.editor)} — ${escapeHtml(it.couple.name)} — ${escapeHtml(it.entrega.tag)}</span>
+        <span class="meta"><span class="dtag st-${it.color}">${escapeHtml(it.entrega.status)}</span></span>
+      </div>`).join('')}
+  </div>` : ''}
+  ${ppDashFilter? '<p class="kpi-sub" style="margin-bottom:10px;">Mostrando: '+cards.find(c=>c.key===ppDashFilter)?.label+' — clique de novo no card pra limpar o filtro.</p>' : ''}
+  ${renderPPEntregaTable(list)}
   `;
 }
-function renderPPProjectTable(list){
+function renderPPEntregaTable(list){
   return `
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Projeto</th><th>SSD</th><th>Data evento</th><th>Editor</th><th>Status</th><th>Prazo limite</th><th>Dias restantes</th><th></th></tr></thead>
+      <thead><tr><th>Projeto</th><th>SSD</th><th>Data evento</th><th>Editor</th><th>Entregável</th><th>Status</th><th>Prazo</th><th>Dias restantes</th><th></th></tr></thead>
       <tbody>
-      ${list.length? list.slice().sort((a,b)=>(a.diasRestantes??9999)-(b.diasRestantes??9999)).map(p=>{
-        const ind = prazoIndicador(p.diasRestantes, p.couple.ppStatus);
-        return `<tr>
-          <td>${escapeHtml(p.couple.name)}${p.couple.contratoAnexado?` <span title="Contrato anexado${p.couple.contratoLocal?': '+escapeHtml(p.couple.contratoLocal):''}">📎</span>`:''}</td>
-          <td>${escapeHtml(p.ssd.name)}</td>
-          <td class="mono">${p.couple.eventDate?fmtDateBR(p.couple.eventDate):'—'}</td>
-          <td>${p.couple.editorPrincipal? escapeHtml(p.couple.editorPrincipal) : '<span class="kpi-sub">—</span>'}${p.couple.editorSecundario?` + ${escapeHtml(p.couple.editorSecundario)}`:''}</td>
-          <td><span class="badge grey">${escapeHtml(p.couple.ppStatus||'Evento futuro')}</span></td>
-          <td class="mono">${p.prazoLimite?fmtDateBR(p.prazoLimite):'—'}</td>
-          <td class="mono">${p.diasRestantes!==null? p.diasRestantes+'d' : '—'} ${ind?`<span class="badge ${ind.cls}">${ind.label}</span>`:''}</td>
-          <td><button class="btn secondary small" onclick="openCoupleForm('${p.ssd.id}','${p.couple.id}')">Abrir</button></td>
-        </tr>`;
-      }).join('') : `<tr><td colspan="8" style="text-align:center;color:#a5a38c;">Nenhum projeto neste filtro.</td></tr>`}
+      ${list.length? list.slice().sort((a,b)=>(a.dias??9999)-(b.dias??9999)).map(it=>`
+        <tr class="${it.atrasado?'row-red':''}">
+          <td>${escapeHtml(it.couple.name)}${it.couple.contratoAnexado?` <span title="Contrato anexado${it.couple.contratoLocal?': '+escapeHtml(it.couple.contratoLocal):''}">📎</span>`:''}</td>
+          <td>${escapeHtml(it.ssd.name)}</td>
+          <td class="mono">${it.couple.eventDate?fmtDateBR(it.couple.eventDate):'—'}</td>
+          <td>${it.editor? `<span class="badge blue">${editorInitials(it.editor)}</span> ${escapeHtml(it.editor)}` : '<span class="kpi-sub">—</span>'}</td>
+          <td>${escapeHtml(it.entrega.tag)}</td>
+          <td><span class="dtag st-${it.color}">${escapeHtml(it.entrega.status)}${it.atrasado?' · Atrasado':''}</span></td>
+          <td class="mono">${it.entrega.dataPrevista?fmtDateBR(it.entrega.dataPrevista):'—'}</td>
+          <td class="mono">${it.dias!==null? it.dias+'d' : '—'}</td>
+          <td><button class="btn secondary small" onclick="openCoupleForm('${it.ssd.id}','${it.couple.id}')">Abrir</button></td>
+        </tr>`).join('') : `<tr><td colspan="9" style="text-align:center;color:#a5a38c;">Nenhum entregável neste filtro.</td></tr>`}
       </tbody>
     </table>
   </div>`;
 }
 
 function renderPPEquipe(){
-  const projects = allProjects();
+  const items = allEntregaveis();
   return `
   <div class="grid grid-2">
     ${EDITORES.map(ed=>{
-      const mine = projects.filter(p=> p.couple.editorPrincipal===ed || p.couple.editorSecundario===ed);
-      const emEdicao = mine.filter(p=>PP_STATUS_GROUP[p.couple.ppStatus||'Evento futuro']==='edicao').length;
-      const aguardando = mine.filter(p=>PP_STATUS_GROUP[p.couple.ppStatus||'Evento futuro']==='aguardando').length;
-      const correcao = mine.filter(p=>PP_STATUS_GROUP[p.couple.ppStatus||'Evento futuro']==='correcao').length;
-      const proximos30 = mine.filter(p=> p.diasRestantes!==null && p.diasRestantes>=0 && p.diasRestantes<=30 && !['Entregue','Arquivado'].includes(p.couple.ppStatus)).length;
+      const mine = items.filter(it=> it.editor===ed);
+      const emEdicao = mine.filter(it=>it.entrega.status==='Em edição' && !it.atrasado);
+      const decupagem = mine.filter(it=>it.entrega.status==='Decupagem' && !it.atrasado);
+      const aguardando = mine.filter(it=>it.entrega.status==='A fazer' && !it.atrasado);
+      const correcao = mine.filter(it=>it.entrega.status==='Em correção' && !it.atrasado);
+      const proximos30 = mine.filter(it=> it.dias!==null && it.dias>=0 && it.dias<=30 && it.entrega.status!=='Entregue');
+      const agora = [...decupagem, ...emEdicao].sort((a,b)=>(a.dias??9999)-(b.dias??9999));
+      const proximos = aguardando.slice().sort((a,b)=>(a.dias??9999)-(b.dias??9999)).slice(0,4);
       return `
-      <div class="card clickable" onclick="ppSubTab='visao';ppEditorFilter='${ed}';ppDashFilter=null;renderApp()">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;" onclick="ppSubTab='visao';ppEditorFilter='${ed}';ppDashFilter=null;renderApp()">
           <span class="badge blue" style="font-size:14px;padding:8px 12px;">${editorInitials(ed)}</span>
           <h3 class="serif" style="margin:0;font-size:20px;">${ed}</h3>
         </div>
-        <div class="grid grid-2" style="gap:10px;">
-          <div><div class="kpi-label">Projetos</div><div class="kpi-value" style="font-size:20px;">${mine.length}</div></div>
-          <div><div class="kpi-label">Em edição</div><div class="kpi-value" style="font-size:20px;">${emEdicao}</div></div>
-          <div><div class="kpi-label">Aguardando</div><div class="kpi-value" style="font-size:20px;">${aguardando}</div></div>
-          <div><div class="kpi-label">Em correção</div><div class="kpi-value" style="font-size:20px;">${correcao}</div></div>
+        <div class="grid grid-2" style="gap:10px;margin-bottom:12px;">
+          <div><div class="kpi-label">Em edição</div><div class="kpi-value" style="font-size:20px;">${emEdicao.length}</div></div>
+          <div><div class="kpi-label">Decupagem</div><div class="kpi-value" style="font-size:20px;">${decupagem.length}</div></div>
+          <div><div class="kpi-label">Aguardando</div><div class="kpi-value" style="font-size:20px;">${aguardando.length}</div></div>
+          <div><div class="kpi-label">Em correção</div><div class="kpi-value" style="font-size:20px;">${correcao.length}</div></div>
         </div>
-        <div class="kpi-sub" style="margin-top:10px;">${proximos30} entrega${proximos30!==1?'s':''} nos próximos 30 dias</div>
+        ${agora.length? `<div class="kpi-sub" style="margin-bottom:4px;"><b>Agora:</b></div>
+          ${agora.map(it=>`<div class="list-row" onclick="openCoupleForm('${it.ssd.id}','${it.couple.id}')"><span>${escapeHtml(it.couple.name)} — ${escapeHtml(it.entrega.tag)}</span><span class="dtag st-${it.color}">${escapeHtml(it.entrega.status)}</span></div>`).join('')}` : `<div class="kpi-sub">Nada em produção no momento.</div>`}
+        ${proximos.length? `<div class="kpi-sub" style="margin:8px 0 4px;"><b>Próximos:</b></div>
+          ${proximos.map(it=>`<div class="list-row" onclick="openCoupleForm('${it.ssd.id}','${it.couple.id}')"><span>${escapeHtml(it.couple.name)} — ${escapeHtml(it.entrega.tag)}</span><span class="meta">${it.entrega.dataPrevista?fmtDateBR(it.entrega.dataPrevista):'—'}</span></div>`).join('')}` : ''}
+        <div class="kpi-sub" style="margin-top:10px;">${proximos30.length} entrega${proximos30.length!==1?'s':''} nos próximos 30 dias</div>
       </div>`;
     }).join('')}
   </div>`;
 }
 
 function renderPPCorrecoes(){
-  const projects = ppFilteredProjects().filter(p=> PP_STATUS_GROUP[p.couple.ppStatus||'']==='correcao');
+  const items = ppFiltered().filter(it=> it.entrega.status==='Em correção');
   return `
   <div class="pill-group" style="margin-bottom:16px;">
     <button class="pill ${ppEditorFilter==='Todos'?'active':''}" onclick="ppEditorFilter='Todos';renderApp()">Todos</button>
     ${EDITORES.map(e=>`<button class="pill ${ppEditorFilter===e?'active':''}" onclick="ppEditorFilter='${e}';renderApp()">${e}</button>`).join('')}
   </div>
-  ${renderPPProjectTable(projects)}`;
+  ${renderPPEntregaTable(items)}`;
 }
 
 function renderPPPendentes(){
-  const items = [];
-  state.ssds.forEach(ssd=>{
-    ssd.couples.forEach(c=>{
-      if(ppEditorFilter!=='Todos' && c.editorPrincipal!==ppEditorFilter && c.editorSecundario!==ppEditorFilter) return;
-      (c.entregas||[]).forEach(e=>{
-        if(e.status!=='Entregue'){
-          items.push({ ssd, couple:c, entrega:e, dias: e.dataPrevista? diasAte(e.dataPrevista) : null });
-        }
-      });
-    });
-  });
+  const items = ppFiltered().filter(it=> it.entrega.status!=='Entregue' && it.entrega.dataPrevista);
   const vencidas = items.filter(it=>it.dias!==null && it.dias<0).length;
   const em7 = items.filter(it=>it.dias!==null && it.dias>=0 && it.dias<=7).length;
   const em15 = items.filter(it=>it.dias!==null && it.dias>=0 && it.dias<=15).length;
@@ -1439,14 +1479,14 @@ function renderPPPendentes(){
       <thead><tr><th>Projeto</th><th>Entregável</th><th>Editor</th><th>Data-base</th><th>Prazo</th><th>Dias restantes</th><th>Status</th><th></th></tr></thead>
       <tbody>
       ${filtered.length? filtered.map(it=>`
-        <tr class="${it.dias!==null&&it.dias<0?'row-red':''}">
+        <tr class="${it.atrasado?'row-red':''}">
           <td>${escapeHtml(it.couple.name)}</td>
           <td>${escapeHtml(it.entrega.tag)}${it.entrega.qtd?`<div class="kpi-sub">${it.entrega.qtd} dias ${it.entrega.tipoPrazo==='util'?'úteis':it.entrega.tipoPrazo==='corrido'?'corridos':''}</div>`:''}</td>
-          <td>${it.couple.editorPrincipal? escapeHtml(it.couple.editorPrincipal) : '<span class="kpi-sub">—</span>'}</td>
+          <td>${it.editor? escapeHtml(it.editor) : '<span class="kpi-sub">—</span>'}</td>
           <td class="mono">${it.entrega.dataBase?fmtDateBR(it.entrega.dataBase):'—'}</td>
           <td class="mono">${it.entrega.dataPrevista?fmtDateBR(it.entrega.dataPrevista):'—'}</td>
           <td class="mono">${it.dias!==null? it.dias+'d' : '—'}</td>
-          <td><span class="dtag st-${entregaColor(it.entrega)}">${escapeHtml(it.entrega.status)}</span>${it.entrega.obsEntrega?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(it.entrega.obsEntrega)}</div>`:''}</td>
+          <td><span class="dtag st-${it.color}">${escapeHtml(it.entrega.status)}${it.atrasado?' · Atrasado':''}</span>${it.entrega.obsEntrega?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(it.entrega.obsEntrega)}</div>`:''}</td>
           <td><button class="btn secondary small" onclick="openCoupleForm('${it.ssd.id}','${it.couple.id}')">Abrir</button></td>
         </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;color:#a5a38c;">Nenhuma entrega pendente neste filtro.</td></tr>`}
       </tbody>
@@ -1460,6 +1500,10 @@ function renderPPCronograma(){
     <button class="pill ${ppCronoView==='semana'?'active':''}" onclick="ppCronoView='semana';renderApp()">Semana</button>
     <button class="pill ${ppCronoView==='mes'?'active':''}" onclick="ppCronoView='mes';renderApp()">Mês</button>
   </div>
+  <div class="pill-group" style="margin-bottom:16px;">
+    <button class="pill ${ppEditorFilter==='Todos'?'active':''}" onclick="ppEditorFilter='Todos';renderApp()">Todos</button>
+    ${EDITORES.map(e=>`<button class="pill ${ppEditorFilter===e?'active':''}" onclick="ppEditorFilter='${e}';renderApp()">${e}</button>`).join('')}
+  </div>
   ${ppCronoView==='semana'? renderPPCronoSemana() : renderPPCronoMes()}`;
 }
 function renderPPCronoSemana(){
@@ -1467,7 +1511,7 @@ function renderPPCronoSemana(){
   const dow = d.getDay();
   const monday = new Date(d); monday.setDate(d.getDate() - ((dow+6)%7));
   const days = [...Array(7)].map((_,i)=>{ const x=new Date(monday); x.setDate(monday.getDate()+i); return x.toISOString().slice(0,10); });
-  const projects = ppFilteredProjects();
+  const items = ppFiltered().filter(it=>it.entrega.status!=='Entregue');
 
   return `
   <div class="cal-head">
@@ -1481,17 +1525,14 @@ function renderPPCronoSemana(){
   <div class="cal-grid" style="grid-template-columns:repeat(7,1fr);">
     ${days.map(iso=>`<div class="cal-dow">${DOW[parseISO(iso).getDay()]} · ${parseISO(iso).getDate()}</div>`).join('')}
     ${days.map(iso=>{
-      const startHere = projects.filter(p=> calcDataSugeridaInicio(p.prazoLimite)===iso && !['Entregue','Arquivado'].includes(p.couple.ppStatus));
-      const deadlineHere = projects.filter(p=> p.prazoLimite===iso);
+      const here = items.filter(it=> it.entrega.dataPrevista===iso);
       const isToday = iso===todayISO();
-      return `<div class="cal-cell ${isToday?'today':''}">
+      return `<div class="cal-cell ${isToday?'today':''}" onclick="${here.length===1?`openCoupleForm('${here[0].ssd.id}','${here[0].couple.id}')`:''}">
         <div class="cal-daynum">&nbsp;</div>
-        ${startHere.map(p=>`<span class="chip" style="border-left-color:var(--blue);" title="Início sugerido">▶ ${escapeHtml(p.couple.name)}</span>`).join('')}
-        ${deadlineHere.map(p=>`<span class="chip" style="border-left-color:var(--red);" title="Prazo limite">⏰ ${escapeHtml(p.couple.name)}</span>`).join('')}
+        ${here.map(it=>`<span class="chip" style="border-left-color:${it.atrasado?'var(--red)':'var(--blue)'};" title="${escapeHtml(it.editor||'')}">${escapeHtml(it.couple.name)} — ${escapeHtml(it.entrega.tag)}</span>`).join('')}
       </div>`;
     }).join('')}
-  </div>
-  <p class="kpi-sub" style="margin-top:10px;">▶ início sugerido de edição · ⏰ prazo limite de entrega</p>`;
+  </div>`;
 }
 function renderPPCronoMes(){
   const year = ppCronoDate.getFullYear(), month = ppCronoDate.getMonth();
@@ -1503,7 +1544,7 @@ function renderPPCronoMes(){
   for(let i=startDow-1;i>=0;i--) cells.push({d:daysInPrev-i, other:true, iso:null});
   for(let d=1; d<=daysInMonth; d++){ cells.push({d, other:false, iso:`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`}); }
   while(cells.length % 7 !== 0) cells.push({d:cells.length, other:true, iso:null});
-  const projects = ppFilteredProjects();
+  const items = ppFiltered().filter(it=>it.entrega.status!=='Entregue');
   const today = todayISO();
 
   return `
@@ -1519,12 +1560,12 @@ function renderPPCronoMes(){
     ${DOW.map(d=>`<div class="cal-dow">${d}</div>`).join('')}
     ${cells.map(c=>{
       if(c.other) return `<div class="cal-cell other"><div class="cal-daynum">${c.d}</div></div>`;
-      const deadlineHere = projects.filter(p=>p.prazoLimite===c.iso);
+      const here = items.filter(it=> it.entrega.dataPrevista===c.iso);
       const isToday = c.iso===today;
       return `<div class="cal-cell ${isToday?'today':''}">
         <div class="cal-daynum">${c.d}</div>
-        ${deadlineHere.slice(0,3).map(p=>`<span class="chip" style="border-left-color:var(--red);">⏰ ${escapeHtml(p.couple.name)}</span>`).join('')}
-        ${deadlineHere.length>3?`<div class="kpi-sub">+${deadlineHere.length-3}</div>`:''}
+        ${here.slice(0,3).map(it=>`<span class="chip" style="border-left-color:${it.atrasado?'var(--red)':'var(--blue)'};">${escapeHtml(it.couple.name)} — ${escapeHtml(it.entrega.tag)}</span>`).join('')}
+        ${here.length>3?`<div class="kpi-sub">+${here.length-3}</div>`:''}
       </div>`;
     }).join('')}
   </div>`;

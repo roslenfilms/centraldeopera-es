@@ -1195,6 +1195,13 @@ function openCoupleForm(ssdId, coupleId){
         </select>
       </div>
       <div><label class="field">Onde está guardado</label><input type="text" id="f-contratolocal" placeholder="ex.: Google Drive, pasta local..." value="${couple?escapeHtml(couple.contratoLocal||''):''}"></div>
+      <div class="full"><label class="field">HD / Backup</label>
+        <select id="f-hdid">
+          <option value="">Não vinculado</option>
+          ${state.hds.map(hd=>`<option value="${hd.id}" ${couple&&couple.hdId===hd.id?'selected':''}>${escapeHtml(hd.name)}</option>`).join('')}
+        </select>
+        <p class="kpi-sub" style="margin-top:4px;">Vincula este casal ao backup dentro do HD escolhido — aparece automaticamente na aba Backups · HDs, sem precisar cadastrar de novo.</p>
+      </div>
     </div>
     <label class="field">Observação (opcional)</label>
     <input type="text" id="f-obs" value="${couple?escapeHtml(couple.obs||''):''}">
@@ -1252,6 +1259,7 @@ function openCoupleForm(ssdId, coupleId){
     const prazoTipo = document.getElementById('f-prazotipo').value;
     const contratoAnexado = document.getElementById('f-contrato').value === 'sim';
     const contratoLocal = document.getElementById('f-contratolocal').value.trim();
+    const hdId = document.getElementById('f-hdid').value;
     if(!name) return alert('Informe o nome do casal.');
     const entregas = [];
     document.querySelectorAll('.f-etag:checked').forEach(cb=>{
@@ -1270,17 +1278,62 @@ function openCoupleForm(ssdId, coupleId){
       entregas.push({ tag, status, dataPrevista, qtd, tipoPrazo, dataBase, editorEntrega, dataConclusao, obsEntrega:prev.obsEntrega||"" });
     });
     const now = new Date().toISOString();
+    let savedCouple;
     if(couple){
       Object.assign(couple, {name,gb,obs,entregas,eventDate,editorPrincipal,editorSecundario,prazoDias,prazoTipo,contratoAnexado,contratoLocal,updatedAt:now});
       delete couple.tags;
+      savedCouple = couple;
     } else {
-      ssd.couples.push({ id:uid(), name, gb, obs, entregas, eventDate, editorPrincipal, editorSecundario, prazoDias, prazoTipo, contratoAnexado, contratoLocal, createdAt:now, updatedAt:now });
+      savedCouple = { id:uid(), name, gb, obs, entregas, eventDate, editorPrincipal, editorSecundario, prazoDias, prazoTipo, contratoAnexado, contratoLocal, hdId:"", createdAt:now, updatedAt:now };
+      ssd.couples.push(savedCouple);
     }
+    syncCoupleHdLink(ssd, savedCouple, hdId);
     closeModal(); persist();
   }, null, true);
 }
 function cssId(s){ return s.replace(/[^a-zA-Z0-9]/g,'_'); }
 function cssEsc(s){ return s.replace(/(["\\])/g,'\\$1'); }
+/* ---- Vínculo bidirecional Casal <-> HD/Backup (mesma ideia usada em SSD <-> Pós-Produção) ---- */
+function findHdWedding(hd, coupleId){
+  return hd.weddings.find(w=>w.linkedCoupleId===coupleId);
+}
+function unlinkFromAllHds(coupleId){
+  state.hds.forEach(hd=>{
+    hd.weddings.forEach(w=>{
+      if(w.linkedCoupleId===coupleId){ delete w.linkedSsdId; delete w.linkedCoupleId; }
+    });
+  });
+}
+function syncCoupleHdLink(ssd, couple, newHdId){
+  const oldHdId = couple.hdId || "";
+  if(oldHdId === newHdId) {
+    // mesmo HD (ou nenhum) — só garante que os dados do vínculo existente estão atualizados
+    if(newHdId){
+      const hd = state.hds.find(h=>h.id===newHdId);
+      if(hd){
+        let w = findHdWedding(hd, couple.id);
+        if(w){ w.couple = couple.name; if(!w.date) w.date = couple.eventDate||''; }
+        else {
+          // vínculo esperado mas não encontrado (ex.: HD foi editado à mão) — recria a ligação
+          const existing = hd.weddings.find(x=> normName(x.couple)===normName(couple.name) && !x.linkedCoupleId);
+          if(existing){ existing.linkedSsdId = ssd.id; existing.linkedCoupleId = couple.id; }
+          else hd.weddings.push({ id:uid(), couple:couple.name, date:couple.eventDate||'', category:classifyHdCategory(couple.obs), status:'precisa_apagar', obs:'', linkedSsdId:ssd.id, linkedCoupleId:couple.id });
+        }
+      }
+    }
+    return;
+  }
+  // mudou de HD (ou foi desvinculado) — remove o vínculo antigo sem apagar o registro
+  if(oldHdId){ unlinkFromAllHds(couple.id); }
+  couple.hdId = newHdId;
+  if(!newHdId) return;
+  const hd = state.hds.find(h=>h.id===newHdId);
+  if(!hd) return;
+  // tenta reaproveitar um registro já existente com o mesmo nome nesse HD, em vez de duplicar
+  const existing = hd.weddings.find(x=> normName(x.couple)===normName(couple.name) && !x.linkedCoupleId);
+  if(existing){ existing.linkedSsdId = ssd.id; existing.linkedCoupleId = couple.id; existing.couple = couple.name; }
+  else hd.weddings.push({ id:uid(), couple:couple.name, date:couple.eventDate||'', category:classifyHdCategory(couple.obs), status:'precisa_apagar', obs:'', linkedSsdId:ssd.id, linkedCoupleId:couple.id });
+}
 function selectEstatus(btn){
   const group = btn.closest('.status-btns');
   group.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('selected'));
@@ -1289,6 +1342,7 @@ function selectEstatus(btn){
 function deleteCouple(ssdId, coupleId){
   if(!confirm('Excluir este casal do SSD?')) return;
   const ssd = state.ssds.find(s=>s.id===ssdId);
+  unlinkFromAllHds(coupleId);
   ssd.couples = ssd.couples.filter(c=>c.id!==coupleId);
   persist();
 }
@@ -1661,9 +1715,16 @@ function renderHDDetail(hd){
         <th></th>
       </tr></thead>
       <tbody>
-      ${list.length? list.map(w=>`
+      ${list.length? list.map(w=>{
+        let gbLabel = '';
+        if(w.linkedCoupleId){
+          const linkedSsd = state.ssds.find(s=>s.id===w.linkedSsdId);
+          const linkedCouple = linkedSsd && linkedSsd.couples.find(x=>x.id===w.linkedCoupleId);
+          if(linkedCouple) gbLabel = ` — ${fmtGB(linkedCouple.gb)}`;
+        }
+        return `
         <tr class="${w.status==='precisa_apagar'?'row-red':''}">
-          <td>${escapeHtml(w.couple)}${w.obs?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(w.obs)}</div>`:''}</td>
+          <td>${escapeHtml(w.couple)}${w.linkedCoupleId?` <span title="Vinculado ao SSD (mesmo cadastro)">🔗</span>`:''}${gbLabel? `<span class="kpi-sub mono">${gbLabel}</span>`:''}${w.obs?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(w.obs)}</div>`:''}</td>
           <td>${escapeHtml(w.category||'Outros')}</td>
           <td class="mono">${fmtDateBR(w.date)}</td>
           <td><span class="badge grey">${w.status==='precisa_apagar'?'Completo':'Prontos'}</span></td>
@@ -1672,7 +1733,8 @@ function renderHDDetail(hd){
             <button class="btn secondary small" onclick="openWeddingForm('${hd.id}','${w.id}')">Editar</button>
             <button class="btn danger small" onclick="deleteWedding('${hd.id}','${w.id}')">Excluir</button>
           </td>
-        </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:#a5a38c;">Nenhum trabalho neste filtro.</td></tr>`}
+        </tr>`;
+      }).join('') : `<tr><td colspan="6" style="text-align:center;color:#a5a38c;">Nenhum trabalho neste filtro.</td></tr>`}
       </tbody>
     </table>
   </div>`;
@@ -1727,14 +1789,44 @@ function openWeddingForm(hdId, wId){
     const status = selBtn ? selBtn.dataset.status : 'pronto';
     const obs = document.getElementById('f-obs').value.trim();
     if(!couple) return alert('Informe o casal.');
-    if(w){ w.couple=couple; w.date=date; w.category=category; w.status=status; w.obs=obs; }
-    else hd.weddings.push({ id:uid(), couple, date, category, status, obs });
+    if(w){
+      w.couple=couple; w.date=date; w.category=category; w.status=status; w.obs=obs;
+      if(w.linkedCoupleId){
+        const linkedSsd = state.ssds.find(s=>s.id===w.linkedSsdId);
+        const linkedCouple = linkedSsd && linkedSsd.couples.find(x=>x.id===w.linkedCoupleId);
+        if(linkedCouple){ linkedCouple.name = couple; linkedCouple.updatedAt = new Date().toISOString(); }
+      } else {
+        tryAutoLinkWeddingToCouple(w, hd);
+      }
+    } else {
+      const neww = { id:uid(), couple, date, category, status, obs };
+      hd.weddings.push(neww);
+      tryAutoLinkWeddingToCouple(neww, hd);
+    }
     closeModal(); persist();
   }, w? ()=>{ if(confirm('Excluir este registro?')){ deleteWedding(hd.id, w.id); closeModal(); } } : null);
+}
+function tryAutoLinkWeddingToCouple(w, hd){
+  for(const ssd of state.ssds){
+    const c = ssd.couples.find(x=> normName(x.name)===normName(w.couple));
+    if(c){
+      if(c.hdId && c.hdId!==hd.id) unlinkFromAllHds(c.id);
+      c.hdId = hd.id;
+      w.linkedSsdId = ssd.id;
+      w.linkedCoupleId = c.id;
+      return;
+    }
+  }
 }
 function deleteWedding(hdId, wId){
   if(!confirm('Excluir este registro de trabalho?')) return;
   const hd = state.hds.find(h=>h.id===hdId);
+  const w = hd.weddings.find(x=>x.id===wId);
+  if(w && w.linkedCoupleId){
+    const linkedSsd = state.ssds.find(s=>s.id===w.linkedSsdId);
+    const linkedCouple = linkedSsd && linkedSsd.couples.find(x=>x.id===w.linkedCoupleId);
+    if(linkedCouple) linkedCouple.hdId = "";
+  }
   hd.weddings = hd.weddings.filter(w=>w.id!==wId);
   persist();
 }

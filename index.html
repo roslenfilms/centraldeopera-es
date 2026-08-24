@@ -353,6 +353,33 @@ function migrateAgendaRoster(){
     state.agendas.push({ id:"mariana", name:"Mariana", color:"#8a6d9e" });
   }
 }
+function autoLinkExistingHdCouples(){
+  if(state.meta && state.meta.hdAutoLinkedV2) return;
+  let count = 0;
+  state.ssds.forEach(ssd=>{
+    ssd.couples.forEach(c=>{
+      state.hds.forEach(hd=>{
+        const candidates = hd.weddings.filter(x=> !x.linkedCoupleId && normName(x.couple)===normName(c.name));
+        if(!candidates.length) return;
+        // se houver mais de um candidato com o mesmo nome nesse HD, prioriza o que bate a data do evento
+        let w = candidates[0];
+        if(candidates.length>1 && c.eventDate){
+          w = candidates.find(x=>x.date===c.eventDate) || candidates[0];
+        }
+        w.linkedSsdId = ssd.id;
+        w.linkedCoupleId = c.id;
+        if(!c.hdId) c.hdId = hd.id; // guarda o primeiro como vínculo "principal" pro seletor
+        count++;
+      });
+    });
+  });
+  state.meta = state.meta || {};
+  state.meta.hdAutoLinkedV2 = true;
+  return count;
+}
+function getLinkedHds(coupleId){
+  return state.hds.filter(hd=> hd.weddings.some(w=>w.linkedCoupleId===coupleId));
+}
 
 /* ---- Pós-Produção: editores, status, prazos ---- */
 const EDITORES = ["Sônia","Gabriel","Mariana","Lucas"];
@@ -837,6 +864,7 @@ function startPolling(){
         migrateHdSchema();
         migrateAgendaRoster();
         importContractScheduleV2();
+        autoLinkExistingHdCouples();
         renderApp();
         flashNotice("Dados atualizados por outro dispositivo");
       }
@@ -1102,16 +1130,18 @@ function renderSSDCard(ssd){
     <div class="kpi-sub mono">${fmtGB(used)} usado · ${fmtGB(Math.max(0,ssd.capacityGB-used))} livre · ${fmtGB(ssd.capacityGB)} total</div>
     <div class="table-wrap" style="margin-top:14px;">
       <table>
-        <thead><tr><th>Casal</th><th>GB</th><th>Editor</th><th>Prazo</th><th>Entregas</th><th></th></tr></thead>
+        <thead><tr><th>Casal</th><th>GB</th><th>HD</th><th>Editor</th><th>Prazo</th><th>Entregas</th><th></th></tr></thead>
         <tbody>
         ${ssd.couples.length? ssd.couples.map(c=>{
           const prazoLimite = calcPrazoLimite(c.eventDate, c.prazoDias, c.prazoTipo);
           const diasRestantes = prazoLimite? diasAte(prazoLimite) : null;
           const ind = prazoIndicador(diasRestantes, c.ppStatus);
+          const linkedHds = getLinkedHds(c.id);
           return `
           <tr>
             <td>${escapeHtml(c.name)}${c.obs?`<div class="kpi-sub" style="margin-top:2px;">${escapeHtml(c.obs)}</div>`:''}</td>
             <td class="mono">${fmtGB(c.gb)}</td>
+            <td>${linkedHds.length? linkedHds.map(h=>`<span class="badge grey" style="cursor:pointer;margin:1px;" onclick="hdDetailId='${h.id}';goTo('hds');">🔗 ${escapeHtml(h.name)}</span>`).join('') : '<span class="kpi-sub">—</span>'}</td>
             <td>${c.editorPrincipal? `<span class="badge blue" title="${escapeHtml(c.editorPrincipal)}">${editorInitials(c.editorPrincipal)}</span>` : '<span class="kpi-sub">—</span>'}</td>
             <td>${prazoLimite? `<div class="mono" style="font-size:12px;">${fmtDateBR(prazoLimite)}</div>${ind?`<span class="badge ${ind.cls}" style="margin-top:3px;display:inline-block;">${ind.label}</span>`:''}` : '<span class="kpi-sub">—</span>'}</td>
             <td>${(c.entregas&&c.entregas.length)? c.entregas.map(e=>{
@@ -1810,8 +1840,7 @@ function tryAutoLinkWeddingToCouple(w, hd){
   for(const ssd of state.ssds){
     const c = ssd.couples.find(x=> normName(x.name)===normName(w.couple));
     if(c){
-      if(c.hdId && c.hdId!==hd.id) unlinkFromAllHds(c.id);
-      c.hdId = hd.id;
+      if(!c.hdId) c.hdId = hd.id; // só define como "principal" se ainda não tinha nenhum
       w.linkedSsdId = ssd.id;
       w.linkedCoupleId = c.id;
       return;
@@ -2924,8 +2953,9 @@ async function boot(){
   document.getElementById('gearBtn').addEventListener('click', openSetupModal);
   await initState();
   migrateHdSchema();
-        migrateAgendaRoster();
+  migrateAgendaRoster();
   importContractScheduleV2();
+  autoLinkExistingHdCouples();
   persist();
 }
 boot();

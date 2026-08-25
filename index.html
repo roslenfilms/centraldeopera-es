@@ -784,12 +784,11 @@
   .wg-3{aspect-ratio:3840/1920;}
   .wg-3 video,.wg-3 .media{object-fit:contain;background:var(--ink);}
 
-  /* 01, 02, 07 — mantêm o formato/proporção que já tinham, sem regra 4:3 */
+  /* 01, 02 — mantêm o formato/proporção que já tinham, sem regra 4:3 */
   .wg-1{grid-column:span 4;aspect-ratio:2880/2160;}
   .wg-2{grid-column:span 2;aspect-ratio:2880/2160;}
-  .wg-7{grid-column:1 / -1;aspect-ratio:4/3;}
-  .wg-1 video,.wg-2 video,.wg-7 video,
-  .wg-1 .media,.wg-2 .media,.wg-7 .media{object-fit:cover;}
+  .wg-1 video,.wg-2 video,
+  .wg-1 .media,.wg-2 .media{object-fit:cover;}
 
   .wg-3{grid-column:1 / -1;}
   .wg-4{grid-column:span 2;}
@@ -797,7 +796,7 @@
   .wg-6{grid-column:span 2;}
   @media (max-width:860px){
     .work-grid-7{grid-template-columns:1fr;gap:20px;}
-    .wg-1,.wg-2,.wg-3,.wg-4,.wg-5,.wg-6,.wg-7{grid-column:1 / -1;}
+    .wg-1,.wg-2,.wg-3,.wg-4,.wg-5,.wg-6{grid-column:1 / -1;}
   }
 
   /* ---------- experience timeline / collage ---------- */
@@ -1222,7 +1221,6 @@
         <source data-src="casamento-teaser-06.mp4" type="video/mp4">
       </video>
     </div>
-    <div class="wg-item wg-7"><div class="media tone-b"><div class="tint"></div><div class="play-btn"></div><div class="cap">[ teaser roslen 07 — reprodução em destaque ]</div></div></div>
   </div>
 </section>
 

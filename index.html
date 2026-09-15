@@ -1197,6 +1197,11 @@ function openCoupleForm(ssdId, coupleId){
   showModal(`${couple?'Editar':'Novo'} casal`, `
     <div class="form-grid">
       <div class="full"><label class="field">Nome do casal</label><input type="text" id="f-name" value="${couple?escapeHtml(couple.name):''}"></div>
+      ${couple? `<div class="full"><label class="field">SSD de Trabalho</label>
+        <select id="f-ssdid">
+          ${state.ssds.map(s=>`<option value="${s.id}" ${s.id===ssdId?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}
+        </select>
+      </div>` : ''}
       <div><label class="field">GB ocupados</label><input type="number" id="f-gb" class="mono" value="${couple?couple.gb:0}"></div>
       <div><label class="field">Data do evento</label><input type="date" id="f-eventdate" value="${couple?(couple.eventDate||''):''}"></div>
       <div><label class="field">Editor responsável</label>
@@ -1290,7 +1295,12 @@ function openCoupleForm(ssdId, coupleId){
     const contratoAnexado = document.getElementById('f-contrato').value === 'sim';
     const contratoLocal = document.getElementById('f-contratolocal').value.trim();
     const hdId = document.getElementById('f-hdid').value;
+    const newSsdId = couple? document.getElementById('f-ssdid').value : ssdId;
     if(!name) return alert('Informe o nome do casal.');
+    if(couple && newSsdId !== ssd.id){
+      const targetSsd = state.ssds.find(s=>s.id===newSsdId);
+      if(!confirm(`Mover ${name} do ${ssd.name} para o ${targetSsd.name}?`)) return;
+    }
     const entregas = [];
     document.querySelectorAll('.f-etag:checked').forEach(cb=>{
       const tag = cb.dataset.tag;
@@ -1313,6 +1323,18 @@ function openCoupleForm(ssdId, coupleId){
       Object.assign(couple, {name,gb,obs,entregas,eventDate,editorPrincipal,editorSecundario,prazoDias,prazoTipo,contratoAnexado,contratoLocal,updatedAt:now});
       delete couple.tags;
       savedCouple = couple;
+      if(newSsdId !== ssd.id){
+        // move o MESMO registro pro outro SSD — não recria, não duplica
+        ssd.couples = ssd.couples.filter(c=>c.id!==couple.id);
+        const targetSsd = state.ssds.find(s=>s.id===newSsdId);
+        targetSsd.couples.push(couple);
+        // atualiza a referência de SSD nos vínculos de HD já existentes (mesmo casal, mesmos vínculos)
+        state.hds.forEach(hd=> hd.weddings.forEach(w=>{ if(w.linkedCoupleId===couple.id) w.linkedSsdId = newSsdId; }));
+        syncCoupleHdLink(targetSsd, savedCouple, hdId);
+        closeModal(); persist();
+        flashNotice(`${name} movido para o ${targetSsd.name}.`);
+        return;
+      }
     } else {
       savedCouple = { id:uid(), name, gb, obs, entregas, eventDate, editorPrincipal, editorSecundario, prazoDias, prazoTipo, contratoAnexado, contratoLocal, hdId:"", createdAt:now, updatedAt:now };
       ssd.couples.push(savedCouple);
